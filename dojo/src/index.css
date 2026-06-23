@@ -1,0 +1,615 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ===== Backgrounds ===== */
+    --bg-main: 248 250 255;
+    /* off-white with cool blue tint */
+    --bg-card: 255 255 255;
+    /* clean white cards */
+
+    /* ===== Text ===== */
+    --text-main: 30 41 59;
+    /* slate-900 */
+    --text-muted: 100 116 139;
+    /* slate-500 */
+
+    /* ===== Borders ===== */
+    --border-main: 226 232 240;
+    /* slate-200 */
+
+    /* ===== Brand (Blue × Purple) ===== */
+    --brand-primary: 59 130 246;
+    /* blue-500 */
+    --brand-accent: 139 92 246;
+    /* purple-500 */
+    --brand-muted: 147 197 253;
+    /* blue-300 */
+
+    /* ===== Header ===== */
+    --header-bg: 248 250 255;
+    --header-surface: 255 255 255;
+    --header-text: 30 41 59;
+    --header-muted: 100 116 139;
+    --header-border: 226 232 240;
+
+    /* ===== Canvas / Charts ===== */
+    --canvas-track: 226 232 240;
+    --canvas-stroke: 59 130 246;
+    --canvas-text: 30 41 59;
+
+    /* ===== Titles / Gradients ===== */
+    --title-3d-gradient: linear-gradient(to bottom,
+        #4f46e5 0%,
+        #6366f1 45%,
+        #8b5cf6 100%);
+    --title-3d-shadow: #312e81;
+  }
+
+
+
+
+  .dark {
+    /* ===== Backgrounds (keep blue, refined) ===== */
+    --bg-main: 11 19 41;
+    /* deep navy blue (unchanged feel) */
+    --bg-card: 17 28 60;
+    /* slightly lighter for cards */
+
+    /* ===== Text ===== */
+    --text-main: 241 245 249;
+    /* slate-100 */
+    --text-muted: 148 163 184;
+    /* slate-400 */
+
+    /* ===== Borders ===== */
+    --border-main: 51 65 85;
+    /* slate-600 */
+
+    /* ===== Brand (match light theme) ===== */
+    --brand-primary: 96 165 250;
+    /* blue-400 */
+    --brand-accent: 167 139 250;
+    /* purple-400 */
+    --brand-muted: 148 163 184;
+
+    /* ===== Header ===== */
+    --header-bg: 11 19 41;
+    --header-surface: 17 28 60;
+    --header-text: 241 245 249;
+    --header-muted: 148 163 184;
+    --header-border: 51 65 85;
+
+    /* ===== Canvas / Charts ===== */
+    --canvas-track: 51 65 85;
+    --canvas-stroke: 96 165 250;
+    --canvas-text: 241 245 249;
+
+    /* ===== Titles / Gradients ===== */
+    --title-3d-gradient: linear-gradient(to bottom,
+        #93c5fd 0%,
+        #a5b4fc 45%,
+        #c4b5fd 100%);
+    --title-3d-shadow: #1e1b4b;
+  }
+
+}
+
+
+
+html {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  scroll-behavior: smooth;
+}
+
+body {
+
+  @apply antialiased text-text bg-background transition-colors duration-300;
+  font-feature-settings: 'rlig' 1, 'calt' 1;
+}
+
+* {
+
+  @apply border-border;
+}
+
+button {
+  @apply focus:outline-none;
+}
+
+input,
+textarea {
+  @apply focus:outline-none focus:ring-2 focus:ring-accent/50;
+}
+
+
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-white hover:opacity-90 focus:ring-primary shadow-brand;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-background font-bold hover:opacity-90 shadow-sm;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface text-text border border-border hover:bg-background focus:ring-primary shadow-sm;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-full hover:bg-muted/10 text-muted hover:text-primary transition-colors duration-200;
+  }
+
+  .card {
+    @apply bg-surface rounded-xl shadow-soft p-6 border border-border/50 hover:shadow-medium transition-all duration-300;
+  }
+
+  .card-header {
+    @apply border-b border-border pb-4 mb-4;
+  }
+
+  .navbar {
+    @apply fixed top-0 left-0 right-0 bg-surface/90 backdrop-blur-md border-b border-border px-4 py-3 flex justify-between items-center text-text z-50 transition-colors duration-300;
+  }
+
+  .avatar {
+    @apply rounded-full flex items-center justify-center font-semibold text-white bg-primary shadow-md transition-shadow duration-200;
+  }
+
+  .avatar-sm {
+    @apply w-8 h-8 text-sm;
+  }
+
+  .avatar-md {
+    @apply w-10 h-10 text-base;
+  }
+
+  .avatar-lg {
+    @apply w-12 h-12 text-lg;
+  }
+
+  .dropdown {
+    @apply absolute right-0 mt-2 bg-surface border border-border rounded-2xl shadow-hard z-50 animate-slide-down overflow-hidden;
+  }
+
+  .dropdown-item {
+    @apply px-4 py-2 text-sm text-text hover:bg-primary/10 hover:text-primary cursor-pointer transition-colors duration-150;
+  }
+
+  .input {
+    @apply w-full px-3 py-2 bg-background border border-border text-text rounded-lg focus:border-accent focus:ring-2 focus:ring-accent/30 transition-colors duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text mb-2;
+  }
+}
+
+
+@layer utilities {
+  .text-shadow {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--brand-primary)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--brand-muted) / 0.3);
+    border-radius: 20px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--brand-primary));
+  }
+
+
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-in-from-top-2 {
+    from {
+      transform: translateY(-8px);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .animate-in {
+    animation-duration: 200ms;
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: fade-in;
+  }
+
+  .slide-in-from-top-2 {
+    animation-name: slide-in-from-top-2;
+  }
+
+
+  .bg-surface-hover {
+    background-color: rgb(var(--surface-hover));
+  }
+
+
+  .bg-dots-pattern {
+    background-image: radial-gradient(rgb(190 135 15) 1.5px, transparent 1.5px);
+    background-size: 12px 12px;
+  }
+
+  .bg-lines-pattern {
+    background-image: repeating-linear-gradient(45deg,
+        transparent,
+        transparent 10px,
+        rgba(158, 115, 30, 0.15) 10px,
+        rgba(158, 115, 30, 0.15) 11px);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-in-from-top-2 {
+    from {
+      transform: translateY(-8px);
+      opacity: 0;
+    }
+
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-in {
+    animation-duration: 200ms;
+    animation-fill-mode: both;
+  }
+
+  .fade-in {
+    animation-name: fade-in;
+  }
+
+  .slide-in-from-top-2 {
+    animation-name: slide-in-from-top-2;
+  }
+}
+
+
+/* Add to your existing CSS file */
+
+/* Shimmer animation for button */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+/* Enhanced slide in animation */
+@keyframes slideInFromTop {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.slide-in-from-top-2 {
+  animation: slideInFromTop 0.3s ease-out;
+}
+
+/* Pulse glow effect */
+@keyframes pulseGlow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--brand-primary), 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 20px 5px rgba(var(--brand-primary), 0.2);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Floating animation */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Custom scrollbar for the employee list */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgb(var(--bg-card));
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgb(var(--brand-primary) / 0.5), rgb(var(--brand-accent) / 0.5));
+  border-radius: 10px;
+  border: 2px solid rgb(var(--bg-card));
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgb(var(--brand-primary)), rgb(var(--brand-accent)));
+}
+
+/* Enhanced focus states */
+input:focus,
+select:focus {
+  outline: none;
+  border-color: rgb(var(--brand-primary));
+  box-shadow: 0 0 0 4px rgb(var(--brand-primary) / 0.1);
+}
+
+/* Date input styling */
+input[type="date"] {
+  color-scheme: light;
+}
+
+.dark input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  transition: background 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  background: rgb(var(--brand-primary) / 0.1);
+}
+
+/* Select dropdown arrow styling */
+select {
+  background-image: none;
+}
+
+/* Gradient text utility */
+.gradient-text {
+  background: linear-gradient(135deg, rgb(var(--brand-primary)), rgb(var(--brand-accent)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgb(var(--bg-card) / 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Card hover lift effect */
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px -15px rgb(var(--brand-primary) / 0.15);
+}
+
+/* Animated border gradient */
+@keyframes borderGradient {
+
+  0%,
+  100% {
+    border-color: rgb(var(--brand-primary) / 0.3);
+  }
+
+  50% {
+    border-color: rgb(var(--brand-accent) / 0.5);
+  }
+}
+
+.animate-border {
+  animation: borderGradient 3s ease-in-out infinite;
+}
+
+/* Row stagger animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
+
+/* Dark mode specific enhancements */
+.dark .shadow-soft {
+  box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.4);
+}
+
+.dark .shadow-hard {
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* Selection highlight effect */
+.selection-highlight {
+  position: relative;
+}
+
+.selection-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(var(--brand-primary) / 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.selection-highlight:hover::before,
+.selection-highlight.selected::before {
+  opacity: 1;
+}
+
+
+
+/* Gradient-filled icon (works well for "app icon" style) */
+.gradient-icon {
+  width: fit-content;
+  height: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg,
+      rgb(var(--brand-primary)),
+      rgb(var(--brand-accent)));
+
+  /* This makes the background show through the SVG shape */
+  -webkit-mask: none;
+}
+
+/* Make SVG act as a mask so the gradient shows through */
+.gradient-icon__svg {
+  color: #000;
+  /* required for mask */
+  fill: currentColor;
+  -webkit-mask-image: none;
+}
+
+/* Better cross-browser approach: use mask via SVG itself */
+.gradient-icon__svg {
+  background: transparent;
+  /* Use currentColor and rely on mask in container if you swap to icon components that support it */
+}
+
+
+
+/* Custom Dual-Tone Icon Style */
+.dual-tone-icon {
+  stroke: #A855F7; /* Main Purple */
+}
+
+/* This targets the secondary paths in some Lucide icons to make them Teal */
+.dual-tone-icon circle, 
+.dual-tone-icon path:nth-child(even) {
+  stroke: #2DD4BF; /* Teal color from your image */
+}
+
+/* Solid Black Circular Icon Style */
+.icon-frame {
+  @apply flex items-center justify-center rounded-full border border-slate-200 bg-white transition-all duration-300;
+  width: 42px;  /* Slightly larger for better visibility */
+  height: 42px;
+  color: #00030f; /* Black icon by default */
+}
+
+/* Hover state: Frame becomes black, Icon becomes white */
+.group\/link:hover .icon-frame {
+  /* Using a deep Navy/Slate Blue */
+  background-color: #062f8d; 
+  border-color: #0a245f;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(17, 75, 211, 0.15);
+  color: #ffffff; /* Icon turns white on the dark blue background */
+}
+
+
+
+:root {
+  --bg-surface: #f8fafc; /* Light grey/white for Light Mode */
+  --text-text: #1e293b;
+}
+
+.dark {
+  --bg-surface: #0f172a; /* Dark blue/slate for Dark Mode */
+  --text-text: #f1f5f9;
+}

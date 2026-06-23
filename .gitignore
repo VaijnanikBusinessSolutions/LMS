@@ -1,0 +1,78 @@
+# ========================
+# General / OS / IDE
+# ========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+*.sublime-workspace
+
+# ========================
+# Node.js / React (The 'dojo' folder)
+# ========================
+# Dependencies
+node_modules/
+dojo/node_modules/
+
+# Production build output
+dist/
+build/
+dojo/dist/
+
+# Vite specific
+.vite/
+.vite-temp/
+
+# Environment variables (security)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ========================
+# Python / Django (The 'Dojo2_0' folder)
+# ========================
+# Byte-compiled / Optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments (Common names)
+venv/
+env/
+.venv/
+.env/
+
+# Database
+# Assuming SQLite is used locally. If using Postgres/MySQL, this isn't strictly needed but good to keep.
+*.sqlite3
+db.sqlite3
+Dojo2_0/db.sqlite3
+
+# Django Media (User uploaded files should not be git tracked)
+media/
+Dojo2_0/media/
+
+# Static files (Collected static files, not your source files)
+static/
+staticfiles/
+Dojo2_0/static/
+
+# Django Local Settings (If you use a specific local overrides file)
+local_settings.py
+
+# ========================
+# Socket Folders (Client/Server)
+# ========================
+# Ignoring likely virtual environments or temp files inside these specific folders
+client_socket/venv/
+client_socket/__pycache__/
+server_socket/venv/
+server_socket/__pycache__/
