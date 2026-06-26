@@ -6,6 +6,7 @@ import {
   CheckCircle2, XCircle, ChevronLeft, ChevronRight, LayoutGrid, List,
   SlidersHorizontal, RefreshCw, Download, ArrowUpDown, TrendingUp, Clock, Zap
 } from 'lucide-react';
+import { normalizeListResponse } from "../utils/api";
 
 interface User {
   id: number;
@@ -93,7 +94,7 @@ const UserTable: React.FC = () => {
     fetch("http://127.0.0.1:8000/lms/users/")
       .then((response) => response.json())
       .then((data) => {
-        setUsers(data);
+        setUsers(normalizeListResponse<User>(data));
         setLoading(false);
       })
       .catch((error) => {

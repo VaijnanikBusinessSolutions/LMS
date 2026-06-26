@@ -422,6 +422,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { API_URL } from '../CreateCourse/components/Utils/utils';
+import { normalizeListResponse } from '../../utils/api';
 
 // Interface matching your CourseSerializer JSON output
 interface CourseAssignment {
@@ -475,7 +476,7 @@ const CertificateHome: React.FC = () => {
           throw new Error(`Failed to fetch certificates. Status: ${response.status}`);
         }
 
-        const data: CourseAssignment[] = await response.json();
+        const data = normalizeListResponse<CourseAssignment>(await response.json());
         setCourses(data);
       } catch (err) {
         console.error("Error loading certificates:", err);

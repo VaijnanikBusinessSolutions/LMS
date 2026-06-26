@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getDepartments } from '../../hooks/ServiceApis';
+import { normalizeListResponse } from '../../../utils/api';
 
 interface LocationState {
   levelId?: number;
@@ -21,7 +22,7 @@ const Level4: React.FC = () => {
       try {
         const data = await getDepartments();
         console.log('Departments:', data);
-        setDepartments(data);
+        setDepartments(normalizeListResponse<any>(data));
       } catch (error) {
         console.error('Error fetching departments:', error);
       }

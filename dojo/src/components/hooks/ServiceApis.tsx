@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API_ENDPOINTS } from "../constants/api";
+import { normalizeListResponse } from "../../utils/api";
 import type { CheckData, CheckDataPayload, CheckDataResponse, CheckResults, Employee, PassingCriteria, Question, StationSettingPayload, SublineResponse } from "../constants/types";
 
 export const saveUserInfo = async (formData: FormData) => {
@@ -389,7 +390,7 @@ export const getDepartments = async () => {
     throw new Error(`Error fetching departments: ${response.statusText}`);
   }
 
-  return response.json();
+  return normalizeListResponse(await response.json());
 };
 
 

@@ -752,6 +752,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Filter, Search, ChevronRight, Sparkles, TrendingUp, BookOpen, Clock, Users, Star, ArrowRight, Play, Bookmark, GraduationCap, Briefcase, BarChart, CheckCircle, LayoutGrid, List, Table2, ChevronUp, ChevronDown, Eye, Grid3X3, Columns } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { normalizeListResponse } from '../../utils/api';
 
 const API_URL = 'http://127.0.0.1:8000/lms';
 
@@ -1654,7 +1655,7 @@ const CoursesView = () => {
         
         const coursesResponse = await fetch(`${API_URL}/courses/`);
         if (!coursesResponse.ok) throw new Error(`HTTP error! status: ${coursesResponse.status}`);
-        const coursesData: Course[] = await coursesResponse.json();
+        const coursesData = normalizeListResponse<Course>(await coursesResponse.json());
         setCourses(coursesData);
         
         const allTags: string[] = coursesData.flatMap((course: Course) => course.tags);
@@ -1673,7 +1674,7 @@ const CoursesView = () => {
             });
             
             if (assignedResponse.ok) {
-                const assignedData = await assignedResponse.json();
+                const assignedData = normalizeListResponse<any>(await assignedResponse.json());
                 const normalizedAssigned = assignedData.map((item: any) => item.course ? item.course : item);
                 setAssignedCourses(normalizedAssigned);
             }

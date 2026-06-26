@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { FileText, Link2, Download, ExternalLink, FolderOpen, Search, Calendar, BookOpen, Loader2, AlertCircle, RefreshCw, Filter, ChevronDown, Grid3X3, List, Sparkles } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 // Interfaces
 interface LessonAttachment {
@@ -65,7 +66,7 @@ const LessonAttachments: React.FC = () => {
         }
 
         const data = await response.json();
-        setAttachments(data);
+        setAttachments(normalizeListResponse<LessonAttachment>(data));
       } catch (err: any) {
         setError(err.message || 'Failed to fetch data');
       } finally {

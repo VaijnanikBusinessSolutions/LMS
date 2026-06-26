@@ -1299,28 +1299,7 @@ const NotificationPopup: React.FC = () => {
     }
   };
 
-  // --- 3. OPTIONAL: FETCH USER (Fixes your specific 404 log) ---
-  // This is just to ensure the backend connection is valid, not strictly needed for the popup
-  // but included since your error logs showed it failing.
-  useEffect(() => {
-    const verifyConnection = async () => {
-      const token = getToken();
-      if (!token) return;
-      
-      try {
-        const res = await fetch(`${API_BASE_URL}/users/me/`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        // We don't do anything with the user data here, just verifying connection
-        // If this returns 404, ensure you added the @action to UserViewSet as discussed
-      } catch (e) {
-        // Silent fail
-      }
-    };
-    verifyConnection();
-  }, []);
-
-  // --- 4. POLLING EFFECT ---
+  // --- 3. POLLING EFFECT ---
   useEffect(() => {
     // Check immediately on mount
     checkNotifications();
@@ -1332,7 +1311,7 @@ const NotificationPopup: React.FC = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // --- 5. AUTO HIDE EFFECT ---
+  // --- 4. AUTO HIDE EFFECT ---
   useEffect(() => {
     if (visible) {
       const timer = setTimeout(() => {

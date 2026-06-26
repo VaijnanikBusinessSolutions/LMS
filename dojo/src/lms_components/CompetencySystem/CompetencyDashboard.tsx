@@ -967,6 +967,7 @@ import {
   Sparkles, Grip, GraduationCap, Loader2, Zap, Star, Award, Crown, Gem, Flame, Heart, 
   Diamond, Hexagon, Circle, Triangle, Pentagon
 } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 // Import Rule Setup Component
 import RuleBasedCompetencySetup from './Competencymatrixsetup';
@@ -1288,7 +1289,7 @@ const CompetencyDashboard = ({ onNavigate }: { onNavigate: (view: any) => void }
     fetch(`${API_BASE}/organization/`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => {
-        const safeData = Array.isArray(data) ? data : []; 
+        const safeData = normalizeListResponse<any>(data);
         setOrgData({
           hqs: safeData.filter((n: any) => n.org_type === 'hq'),
           bus: safeData.filter((n: any) => n.org_type === 'bu'),
@@ -1870,7 +1871,7 @@ const LevelsView = () => {
     const fetchLevels = async () => {
       try {
         const res = await fetch(`${API_BASE}/config/levels/`, { headers: getAuthHeaders() });
-        if (res.ok) setLevels(await res.json());
+        if (res.ok) setLevels(normalizeListResponse<any>(await res.json()));
       } catch (e) { console.error(e); } finally { setLoading(false); }
     };
     fetchLevels();

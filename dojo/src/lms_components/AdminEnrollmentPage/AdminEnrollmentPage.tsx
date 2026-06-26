@@ -9,6 +9,7 @@ import {
   ChevronsLeft, ChevronsRight, Calendar, CheckSquare,
   Square, MinusSquare, Sparkles, TrendingUp, UserMinus, Filter
 } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 // --- Types ---
 interface Course {
@@ -112,7 +113,7 @@ export default function AdminEnrollmentPage() {
 
         if (coursesRes.ok) {
           const data = await coursesRes.json();
-          setCourses(data);
+          setCourses(normalizeListResponse<Course>(data));
         }
       } catch (error) {
         console.error("Error fetching data:", error);

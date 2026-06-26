@@ -1619,6 +1619,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import CreatableSelect from 'react-select/creatable';
+import { normalizeListResponse } from '../../../../utils/api';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -1932,35 +1933,46 @@ const Scheduling: React.FC = () => {
   const fetchSessions = async () => {
     try {
       const res = await fetch(`${API_BASE}/schedules/`);
-      if (res.ok) setTrainingSessions(await res.json());
+      if (!res.ok) {
+        setTrainingSessions([]);
+        return;
+      }
+      const data = await res.json();
+      setTrainingSessions(
+        normalizeListResponse<TrainingSession>(data).map((session) => ({
+          ...session,
+          employees: Array.isArray(session.employees) ? session.employees : [],
+          topics: Array.isArray(session.topics) ? session.topics : [],
+        }))
+      );
     } catch {}
   };
 
   const fetchCategories = async () => {
     try {
       const res = await fetch(`${API_BASE}/training-categories/`);
-      if (res.ok) setTrainingCategories(await res.json());
+      if (res.ok) setTrainingCategories(normalizeListResponse<TrainingCategory>(await res.json()));
     } catch {}
   };
 
   const fetchAllTopics = async () => {
     try {
       const res = await fetch(`${API_BASE}/curriculums/`);
-      if (res.ok) setTrainingTopics(await res.json());
+      if (res.ok) setTrainingTopics(normalizeListResponse<TrainingTopic>(await res.json()));
     } catch {}
   };
 
   const fetchTrainers = async () => {
     try {
       const res = await fetch(`${API_BASE}/trainer_name/`);
-      if (res.ok) setTrainers(await res.json());
+      if (res.ok) setTrainers(normalizeListResponse<Trainer>(await res.json()));
     } catch {}
   };
 
   const fetchVenues = async () => {
     try {
       const res = await fetch(`${API_BASE}/venues/`);
-      if (res.ok) setVenues(await res.json());
+      if (res.ok) setVenues(normalizeListResponse<Venue>(await res.json()));
     } catch {}
   };
 
@@ -1968,7 +1980,7 @@ const Scheduling: React.FC = () => {
     try {
       const res = await fetch(`${API_BASE}/mastertable/`);
       const raw = await res.json();
-      const rows = Array.isArray(raw) ? raw : raw?.results ?? [];
+      const rows = normalizeListResponse<any>(raw);
       setEmployees(rows.map((emp: any) => ({
         id: String(emp.emp_id),
         name: `${emp.first_name} ${emp.last_name}`.trim() || String(emp.emp_id),
@@ -1981,7 +1993,7 @@ const Scheduling: React.FC = () => {
     try {
       const res = await fetch(`${API_BASE}/hierarchy/all-departments/`);
       if (!res.ok) return;
-      const departments = await res.json();
+      const departments = normalizeListResponse<any>(await res.json());
       setAllDepartments(departments.map((d: any) => ({ department_id: d.department_id, department_name: d.department_name })));
       // Note: Flattening logic omitted for brevity, reuse your existing logic here
     } catch {}

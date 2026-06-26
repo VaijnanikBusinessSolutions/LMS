@@ -9,243 +9,268 @@ https://docs.djangoproject.com/en/5.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
-from dotenv import load_dotenv
+import datetime
 import os
-
-load_dotenv()
 from pathlib import Path
-import os
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+
+from dotenv import load_dotenv
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR.parent / ".env")
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name, default):
+    value = os.getenv(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def env_list(name, default=None):
+    value = os.getenv(name)
+    if not value:
+        return default or []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-(=8pp7ptsz$f##w_9!$v(!b1upok$^5ykvd42n%cwqaf%pkf@h'
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    "change-me",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool("DEBUG", False)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", ["*"])
 
-ALLOWED_HOSTS = ['*']
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", 
-     "http://172.50.4.138:8000",  # Frontend dev server (Vite)
-]
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-    "http://172.50.4.138:8000",
-]
+CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", True)
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    [
+        "http://localhost:5173",
+        "http://172.50.4.138:8000",
+    ],
+)
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    [
+        "http://localhost:5173",
+        "http://172.50.4.138:8000",
+    ],
+)
 
-# Application definition
-CORS_ALLOW_ALL_ORIGINS = True
-AUTH_USER_MODEL = 'app1.User'
-# Application definition
+
+AUTH_USER_MODEL = "app1.User"
 
 INSTALLED_APPS = [
-    'daphne',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'django_filters',
-    'corsheaders',
-    'rest_framework_simplejwt.token_blacklist',
-    'django_celery_beat',
-    'channels',
+    "daphne",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "django_filters",
+    "corsheaders",
+    "rest_framework_simplejwt.token_blacklist",
+    "django_celery_beat",
+    "channels",
     "app1.apps.App1Config",
-    'app2',
-   
+    "app2",
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', 
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ASGI_APPLICATION = 'Dojo2_0.asgi.application'
-
-
-ROOT_URLCONF = 'Dojo2_0.urls'
+ASGI_APPLICATION = "Dojo2_0.asgi.application"
+ROOT_URLCONF = "Dojo2_0.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'Dojo2_0.wsgi.application'
+WSGI_APPLICATION = "Dojo2_0.wsgi.application"
 
-
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": os.getenv("DB_NAME", "LMS"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "admin"),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 300),
+        "CONN_HEALTH_CHECKS": env_bool("DB_CONN_HEALTH_CHECKS", True),
+        "OPTIONS": {
+            "connect_timeout": env_int("DB_CONNECT_TIMEOUT", 10),
+            "options": os.getenv("DB_OPTIONS", "-c statement_timeout=15000"),
+        },
     }
 }
 
-# Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
-
-# LANGUAGE_CODE = 'en-us'
-
-# TIME_ZONE = 'UTC'
-
-# USE_I18N = True
-
-# USE_TZ = True
-
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Asia/Kolkata'
-USE_TZ = True  # Change this to True
+LANGUAGE_CODE = os.getenv("LANGUAGE_CODE", "en-us")
+TIME_ZONE = os.getenv("TIME_ZONE", "Asia/Kolkata")
+USE_TZ = True
 USE_I18N = True
 
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-# Add these Celery timezone settings
-CELERY_TIMEZONE = 'Asia/Kolkata'
-CELERY_ENABLE_UTC = True
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/1")
 
-CHANNEL_LAYERS = {
+CACHES = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "socket_connect_timeout": env_int("REDIS_SOCKET_CONNECT_TIMEOUT", 5),
+            "socket_timeout": env_int("REDIS_SOCKET_TIMEOUT", 5),
+            "retry_on_timeout": True,
+        },
+        "TIMEOUT": env_int("CACHE_TIMEOUT", 300),
     }
 }
 
-MAX_UPLOAD_SIZE = 524288000 
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+SESSION_CACHE_ALIAS = "default"
 
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = env_int("CELERY_TASK_TIME_LIMIT", 1800)
+CELERY_TASK_SOFT_TIME_LIMIT = env_int("CELERY_TASK_SOFT_TIME_LIMIT", 1500)
+CELERY_WORKER_PREFETCH_MULTIPLIER = env_int("CELERY_WORKER_PREFETCH_MULTIPLIER", 1)
+CELERY_TASK_ACKS_LATE = env_bool("CELERY_TASK_ACKS_LATE", True)
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.getenv("CHANNEL_REDIS_URL", REDIS_URL)],
+        },
+    }
+}
+
+MAX_UPLOAD_SIZE = env_int("MAX_UPLOAD_SIZE", 524288000)
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
-# FOR PRODUCTION (Robust, requires Redis):
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             "hosts": [('127.0.0.1', 6379)],
-#         },
-#     },
-# }
-
 
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
     ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
     ],
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_FILTER_BACKENDS": (
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ),
+    "DEFAULT_PAGINATION_CLASS": "Dojo2_0.api.StandardResultsSetPagination",
+    "PAGE_SIZE": env_int("DEFAULT_PAGE_SIZE", 20),
 }
-
-import datetime
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': datetime.timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': datetime.timedelta(days=1),
-    'ROTATE_REFRESH_TOKEN' :True,
-    'BLACKLIST_AFTER_ROTATION' : True
+    "ACCESS_TOKEN_LIFETIME": datetime.timedelta(
+        minutes=env_int("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", 1440)
+    ),
+    "REFRESH_TOKEN_LIFETIME": datetime.timedelta(
+        minutes=env_int("JWT_REFRESH_TOKEN_LIFETIME_MINUTES", 1440)
+    ),
+    "ROTATE_REFRESH_TOKEN": env_bool("JWT_ROTATE_REFRESH_TOKEN", True),
+    "BLACKLIST_AFTER_ROTATION": env_bool("JWT_BLACKLIST_AFTER_ROTATION", True),
 }
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-AI_MEDIA_DIR = os.path.join(MEDIA_ROOT, 'ai_media')
+AI_MEDIA_DIR = os.path.join(MEDIA_ROOT, "ai_media")
 os.makedirs(AI_MEDIA_DIR, exist_ok=True)
 
-STATIC_URL = 'static/'
+STATIC_URL = os.getenv("STATIC_URL", "static/")
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
 
-BACKEND_BASE_URL = "http://127.0.0.1:8000"
-#Biometric Realtime
-
-# ESSL_API_WSDL = 'http://etime.esslsecurity.com:3366/WebAPIService.asmx?WSDL'
-# ESSL_API_KEY = '11'
-# ESSL_SERIAL_NUMBER = 'UDP3244801387'
-# ESSL_USERNAME = 'essl'
-# ESSL_PASSWORD = 'Essl@123'
-
-ESSL_API_WSDL = 'http://192.168.1.19:85/WebAPIService.asmx?WSDL'
-ESSL_API_KEY = '11'
-ESSL_SERIAL_NUMBER = 'NYU7251902533'
-ESSL_USERNAME = 'essl'
-ESSL_PASSWORD = 'essl'
+ESSL_API_WSDL = os.getenv("ESSL_API_WSDL", "http://192.168.1.19:85/WebAPIService.asmx?WSDL")
+ESSL_API_KEY = os.getenv("ESSL_API_KEY", "11")
+ESSL_SERIAL_NUMBER = os.getenv("ESSL_SERIAL_NUMBER", "NYU7251902533")
+ESSL_USERNAME = os.getenv("ESSL_USERNAME", "essl")
+ESSL_PASSWORD = os.getenv("ESSL_PASSWORD", "essl")
 
 
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
 
-# ======= for email sending Handover ================
 
-# settings.py
-
-print("--- SETTING EMAIL CONFIG START ---")
-
-# --- Email Configuration ---
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'mail.vbsai.com'  # Or mail.vbsai.com
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'jeeshma.s@vbsai.com'
-EMAIL_HOST_PASSWORD = 'jeeshma@vbs' 
-DEFAULT_FROM_EMAIL = 'jeeshma.s@vbsai.com'
-
-print(f"--- EMAIL HOST IS CURRENTLY: {EMAIL_HOST} ---")
-
+ENABLE_APSCHEDULER = env_bool("ENABLE_APSCHEDULER", False)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

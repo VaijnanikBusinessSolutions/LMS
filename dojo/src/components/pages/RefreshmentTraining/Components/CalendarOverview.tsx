@@ -469,6 +469,7 @@ import {
   User,
   Building2,
 } from 'lucide-react';
+import { normalizeListResponse } from '../../../../utils/api';
 
 interface TrainingTopic {
   id: number | string;
@@ -513,7 +514,7 @@ const CalendarOverview: React.FC = () => {
       const res = await fetch('http://localhost:8000/schedules/');
       if (res.ok) {
         const data = await res.json();
-        setTrainingSessions(data);
+        setTrainingSessions(normalizeListResponse<TrainingSession>(data));
       } else {
         setTrainingSessions([]);
       }

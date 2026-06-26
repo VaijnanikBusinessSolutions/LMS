@@ -600,7 +600,14 @@ const CourseList = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setCourses(data);
+      const normalizedCourses = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.results)
+          ? data.results
+          : Array.isArray(data?.data)
+            ? data.data
+            : [];
+      setCourses(normalizedCourses);
     } catch (err) {
       setError('Failed to fetch courses. Please check your backend connection.');
       console.error('Failed to fetch courses:', err);

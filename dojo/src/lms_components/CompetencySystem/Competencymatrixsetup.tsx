@@ -1032,6 +1032,7 @@ import {
   Zap, Award, Star, ChevronRight, Shield, Crown,
   BookOpen, TrendingUp, Filter, RotateCcw, Info
 } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 // ==========================================
 // 1. TYPES & INTERFACES
@@ -1232,11 +1233,11 @@ const RuleBasedCompetencySetup: React.FC = () => {
         ]);
         
         if (orgRes.ok) {
-            const nodes: OrgNode[] = await orgRes.json();
+            const nodes = normalizeListResponse<OrgNode>(await orgRes.json());
             processHierarchyData(nodes);
         }
-        if (libRes.ok) setLibraryData(await libRes.json());
-        if (grpRes.ok) setGroups(await grpRes.json());
+        if (libRes.ok) setLibraryData(normalizeListResponse<LibrarySkill>(await libRes.json()));
+        if (grpRes.ok) setGroups(normalizeListResponse<Group>(await grpRes.json()));
 
       } catch (error) {
         console.error("Failed to load data:", error);

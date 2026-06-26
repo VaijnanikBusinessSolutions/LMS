@@ -1263,6 +1263,7 @@ import { useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import type { ChatMember } from '../GroupChat';
 import GroupChat from '../GroupChat';
+import { normalizeListResponse } from '../../../utils/api';
 
 const API_BASE = 'http://127.0.0.1:8000/lms';
 
@@ -1467,8 +1468,9 @@ const CreateGroupPage: React.FC = () => {
         if (isAdmin) commonPromises.push(fetch(`${API_BASE}/users/team_leaders/`, { headers }));
 
         const responses = await Promise.all(commonPromises);
-        const [empJson, courseJson] = [await responses[0].json(), await responses[1].json()];
-        const tlJson = isAdmin ? await responses[2].json() : [];
+        const empJson = normalizeListResponse<ApiUser>(await responses[0].json());
+        const courseJson = normalizeListResponse<ApiCourse>(await responses[1].json());
+        const tlJson = isAdmin ? normalizeListResponse<ApiUser>(await responses[2].json()) : [];
 
         if (!mounted) return;
         setEmployees(empJson || []); setCourses(courseJson || []); if (isAdmin) setTeamLeaders(tlJson || []);

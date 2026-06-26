@@ -958,6 +958,7 @@ import {
   Download,
   ArrowLeft,
 } from "lucide-react";
+import { normalizeListResponse } from "../../../utils/api";
 
 const API_BASE_URL = "http://localhost:8000";
 
@@ -1092,7 +1093,7 @@ const ResultsExplorer: React.FC = () => {
         setLoadingLevels(true);
         setError(null);
         const url = `${API_BASE_URL}/api/results/levels/?mode=${mode}`;
-        const data = await fetchJson<LevelOption[]>(url);
+        const data = normalizeListResponse<LevelOption>(await fetchJson<unknown>(url));
         setLevels(data);
         setSelectedLevelId((prev) => {
           if (prev !== null && data.some((d) => d.level_id === prev)) {
@@ -1129,7 +1130,7 @@ const ResultsExplorer: React.FC = () => {
         setLoadingDepartments(true);
         setError(null);
         const url = `${API_BASE_URL}/api/results/departments/?level_id=${selectedLevelId}&mode=${mode}`;
-        const data = await fetchJson<DepartmentOption[]>(url);
+        const data = normalizeListResponse<DepartmentOption>(await fetchJson<unknown>(url));
         setDepartments(data);
         setSelectedDepartmentId((prev) => {
           if (prev !== null && data.some((d) => d.department_id === prev)) {

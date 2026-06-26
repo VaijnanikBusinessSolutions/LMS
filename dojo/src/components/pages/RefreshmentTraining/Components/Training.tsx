@@ -511,6 +511,7 @@ import RefresherRemoteTest from './RefresherRemoteTest';
 import RefresherIndividualLobby from './RefresherIndividualLobby';
 import RefresherRemoteLobby from './RefresherRemoteLobby';
 import RefresherBatchView from './RefresherBatchView';
+import { normalizeListResponse } from '../../../../utils/api';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -568,6 +569,8 @@ interface TrainingBatch {
 
 interface TrainingProps {
   setActiveModule: (module: string) => void;
+  setSelectedCategoryId?: (id: number | string | null) => void;
+  setSelectedTopicId?: (id: number | string | null) => void;
 }
 
 const Training: React.FC<TrainingProps> = ({ setActiveModule }) => {
@@ -607,13 +610,14 @@ const Training: React.FC<TrainingProps> = ({ setActiveModule }) => {
       const res = await fetch(`${API_BASE}/schedules/`);
       if (!res.ok) { setTrainingSessions([]); return; }
       const data = await res.json();
-      const mapped: TrainingSession[] = data.map((s: any) => ({
+      const mapped: TrainingSession[] = normalizeListResponse<any>(data).map((s: any) => ({
         ...s,
-        employees: (s.employees || []).map((e: any) => ({
+        employees: (Array.isArray(s.employees) ? s.employees : []).map((e: any) => ({
           id: String(e.emp_id ?? e.id ?? ''),
           full_name: [e.first_name, e.last_name].filter(Boolean).join(' ').trim() || String(e.emp_id),
           employee_code: String(e.employee_code ?? e.emp_id),
         })),
+        topics: Array.isArray(s.topics) ? s.topics : [],
       }));
       setTrainingSessions(mapped);
     } catch (err) { console.error(err); setTrainingSessions([]); }
@@ -622,7 +626,7 @@ const Training: React.FC<TrainingProps> = ({ setActiveModule }) => {
   const fetchBatches = async (scheduleId: number) => {
     try {
       const res = await fetch(`${API_BASE}/schedules/${scheduleId}/batches/`);
-      if (res.ok) setBatches(await res.json());
+      if (res.ok) setBatches(normalizeListResponse<TrainingBatch>(await res.json()));
       else setBatches([]);
     } catch (err) { console.error(err); setBatches([]); }
   };
@@ -630,7 +634,7 @@ const Training: React.FC<TrainingProps> = ({ setActiveModule }) => {
   const fetchTopicFiles = async (scheduleId: number) => {
     try {
       const res = await fetch(`${API_BASE}/schedules/${scheduleId}/contents/`);
-      if (res.ok) setTopicFiles(await res.json());
+      if (res.ok) setTopicFiles(normalizeListResponse<TopicFile>(await res.json()));
       else setTopicFiles([]);
     } catch (err) { console.error(err); setTopicFiles([]); }
   };

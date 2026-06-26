@@ -3,6 +3,7 @@ import logging
 import csv
 import calendar
 import os
+from Dojo2_0.api import LargeResultsSetPagination
 from django.core.files.base import ContentFile 
 import uuid
 from datetime import date, timedelta, datetime
@@ -88,7 +89,10 @@ from .serializers import (
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
-from .ai_engine import LMSAIEngine # Added for AI features
+
+def get_ai_engine():
+    from .ai_engine import LMSAIEngine
+    return LMSAIEngine
 
 # =====================================================
 # 1. USER VIEWSET (Refactored for Profiles)
@@ -103,6 +107,7 @@ class UserViewSet(viewsets.ModelViewSet):
     
     serializer_class = LMSProfileSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = None
     
     filter_backends = [filters.SearchFilter]
     # FIX 2: Update search fields to match LMSProfile fields (removed 'lms_profile__' prefix)
@@ -133,6 +138,20 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(emp_profiles, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='me')
+    def me(self, request):
+        profile = getattr(request.user, 'lms_profile', None)
+        if profile is not None:
+            serializer = self.get_serializer(profile)
+            return Response(serializer.data)
+
+        return Response({
+            'id': request.user.id,
+            'email': request.user.email,
+            'first_name': getattr(request.user, 'first_name', ''),
+            'last_name': getattr(request.user, 'last_name', ''),
+        })
+
 # =====================================================
 # 2. COURSE VIEWSET
 # =====================================================
@@ -142,6 +161,7 @@ class CourseViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [filters.SearchFilter]
     search_fields = ['title', 'instructor_name']
+    pagination_class = None
     
 
     def retrieve(self, request, *args, **kwargs):
@@ -151,7 +171,11 @@ class CourseViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def get_queryset(self):
-        queryset = Course.objects.all().order_by('-created')
+        queryset = Course.objects.select_related('instructor').prefetch_related(
+            'roadmap',
+            'assignments',
+            'tests',
+        ).order_by('-created')
         user = self.request.user
 
         if not user.is_authenticated:
@@ -557,6 +581,7 @@ class AnswerSubmissionViewSet(viewsets.ModelViewSet):
     queryset = AnswerSubmission.objects.all()
     serializer_class = AnswerSubmissionSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
 
     def create(self, request, *args, **kwargs):
         logger.info("=" * 50)
@@ -746,6 +771,7 @@ class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
@@ -763,6 +789,7 @@ class GroupViewSet(viewsets.ModelViewSet):
 class CourseAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = CourseAssignmentSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
@@ -770,11 +797,11 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
             return CourseAssignment.objects.none()
 
         if user.is_staff: 
-            return CourseAssignment.objects.all()
+            return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').all()
         if user.lms_profile.userType == 'team-leader': 
-            return CourseAssignment.objects.filter(assigned_by=user)
+            return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').filter(assigned_by=user)
         if user.lms_profile.userType == 'employee': 
-            return CourseAssignment.objects.filter(employee=user)
+            return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').filter(employee=user)
         
         return CourseAssignment.objects.none()
 
@@ -784,7 +811,9 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='employees') 
     def get_assignable_employees(self, request):
         user = request.user
-        employees = User.objects.filter(lms_profile__userType__in=['employee', 'team-leader'])
+        employees = User.objects.select_related('lms_profile').filter(
+            lms_profile__userType__in=['employee', 'team-leader']
+        )
 
         # 2. Filter logic (Admin vs Team Leader)
         if hasattr(user, 'lms_profile') and user.lms_profile.userType == 'team-leader':
@@ -922,10 +951,11 @@ class EmployeeReportViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['lms_profile__firstName', 'email']
+    pagination_class = None
 
     def get_queryset(self):
         # Filter by PROFILE userType
-        return User.objects.filter(lms_profile__userType='employee').order_by('-created_at')
+        return User.objects.select_related('lms_profile').filter(lms_profile__userType='employee').order_by('-created_at')
 
     def get_serializer_class(self):
         return EmployeeListSerializer
@@ -939,9 +969,10 @@ class EmployeeReportViewSet(viewsets.ReadOnlyModelViewSet):
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user)
+        return Notification.objects.select_related('recipient', 'sender').filter(recipient=self.request.user).order_by('-created_at')
 
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
@@ -1467,6 +1498,7 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
     serializer_class = LessonAttachmentSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
@@ -1653,10 +1685,11 @@ class TrainingScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = TrainingScheduleSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = None
 
     def get_queryset(self):
         user = self.request.user
-        queryset = TrainingSchedule.objects.all()
+        queryset = TrainingSchedule.objects.select_related('group', 'trainer').all()
 
         # 1. Security: Filter by User Role
         if not user.is_staff:
@@ -2118,6 +2151,7 @@ class CompetencyLibraryViewSet(viewsets.ModelViewSet):
     queryset = CompetencyCategory.objects.all().order_by('order')
     serializer_class = CompetencyCategorySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
 
     @action(detail=False, methods=['get'])
@@ -2251,6 +2285,7 @@ class CompetencyRuleViewSet(viewsets.ModelViewSet):
     queryset = CompetencyRule.objects.all().order_by('-created_at')
     serializer_class = CompetencyRuleSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -2523,12 +2558,13 @@ from .serializers import GroupMessageSerializer
 class GroupMessageViewSet(viewsets.ModelViewSet):
     serializer_class = GroupMessageSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         # Get messages for a specific group
         group_id = self.request.query_params.get('group_id')
         if group_id:
-            return GroupMessage.objects.filter(group_id=group_id).order_by('timestamp')
+            return GroupMessage.objects.select_related('sender', 'group').filter(group_id=group_id).order_by('timestamp')
         return GroupMessage.objects.none()
     
     def perform_create(self, serializer):
@@ -2785,6 +2821,7 @@ class CompetencyViewSet(viewsets.ModelViewSet):
     queryset = Competency.objects.all()
     serializer_class = CompetencySerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def create(self, request, *args, **kwargs):
         # 1. Extract Data
@@ -2879,6 +2916,7 @@ class OrganizationNodeViewSet(viewsets.ModelViewSet):
     """
     queryset = OrganizationNode.objects.select_related('parent').all().order_by('created_at')
     serializer_class = OrganizationNodeSerializer
+    pagination_class = None
 
     @action(detail=False, methods=['get'])
     def structure(self, request):
@@ -3248,9 +3286,6 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-# Import the Engine
-from .ai_engine import LMSAIEngine
-
 import cv2
 import numpy as np
 import os
@@ -3349,7 +3384,7 @@ class AIFeaturesViewSet(viewsets.ViewSet):
                 history_for_ai = [{'sender': m.sender, 'text': m.text} for m in recent_msgs]
 
                 # Call your existing AI Engine
-                ai_response_text = LMSAIEngine.chatbot_response(user, query, history=history_for_ai)
+                ai_response_text = get_ai_engine().chatbot_response(user, query, history=history_for_ai)
 
             # --- D. Save AI Message to DB ---
             # This is crucial! We save the image link OR the text response to the database
@@ -3387,13 +3422,13 @@ class AIFeaturesViewSet(viewsets.ViewSet):
 
         try:
             # 2. Send the RAW prompt to AI Engine
-            ppt_data = LMSAIEngine.generate_ppt_content(user_prompt)
+            ppt_data = get_ai_engine().generate_ppt_content(user_prompt)
             
             if not ppt_data:
                 return Response({"error": "AI could not generate structured content. Try a different prompt."}, status=500)
 
             # 3. Build the File
-            file_result = LMSAIEngine.create_ppt_file(ppt_data)
+            file_result = get_ai_engine().create_ppt_file(ppt_data)
             
             if not file_result:
                 return Response({"error": "Failed to build PPT file."}, status=500)
@@ -3421,7 +3456,7 @@ class AIFeaturesViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def recommendations(self, request):
         try:
-            data = LMSAIEngine.get_recommendations(request.user)
+            data = get_ai_engine().get_recommendations(request.user)
             return Response(data)
         except:
             return Response([])
@@ -3429,7 +3464,7 @@ class AIFeaturesViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def risk_analysis(self, request):
         try:
-            data = LMSAIEngine.analyze_risk(request.user)
+            data = get_ai_engine().analyze_risk(request.user)
             return Response(data)
         except:
             return Response({"risk_score": 0})
@@ -3468,7 +3503,7 @@ class AIFeaturesViewSet(viewsets.ViewSet):
             return Response({"error": "Prompt is required"}, status=400)
 
         # This now calls the GRADIO version
-        result = LMSAIEngine.generate_veo_video(prompt)
+        result = get_ai_engine().generate_veo_video(prompt)
 
         if "error" in result:
             return Response(result, status=503)

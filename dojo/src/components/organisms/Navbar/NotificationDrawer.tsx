@@ -26,6 +26,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   refreshNotifications,
 }) => {
   const API_BASE_URL = 'http://127.0.0.1:8000/lms';
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
   const getAuthHeaders = () => {
     const authData = localStorage.getItem("auth");
@@ -62,7 +63,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const unreadCount = safeNotifications.filter(n => !n.is_read).length;
 
   return (
     <AnimatePresence>
@@ -103,7 +104,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
 
             {/* NOTIFICATION LIST */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-              {notifications.length === 0 ? (
+              {safeNotifications.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-300">
                     <Inbox size={32} strokeWidth={1.5} />
@@ -112,7 +113,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
                   <p className="text-xs text-slate-400 mt-1">We'll let you know when something important happens.</p>
                 </div>
               ) : (
-                notifications.map((n) => (
+                safeNotifications.map((n) => (
                   <NotificationItem 
                     key={n.id} 
                     notification={n} 

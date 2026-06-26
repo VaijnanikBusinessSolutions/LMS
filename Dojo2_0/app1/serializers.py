@@ -164,6 +164,7 @@ class RoleSerializer(serializers.ModelSerializer):
 #         ]
 
 import threading
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.core.mail import send_mail
@@ -196,6 +197,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         except Role.DoesNotExist:
             raise ValidationError(f"Role '{value}' does not exist or is not active.")
         return value
+
+    def validate_email(self, value):
+        return value.strip().lower()
     
     def validate(self, data):
         if not data.get('business_unit'):
@@ -263,15 +267,21 @@ Admin Team
             **validated_data
         )
 
-        # 3. Trigger Background Email
-        # We pass strings (user.email, user.first_name) NOT the user object
-        # to prevent "Database cursor" errors in threads.
-        email_thread = threading.Thread(
-            target=RegisterSerializer.send_welcome_email_task,
-            args=(user.email, user.first_name, raw_password)
-        )
-        email_thread.daemon = True # Detach thread so main process doesn't wait
-        email_thread.start()
+        # 3. Trigger Background Email after commit
+        def trigger_welcome_email():
+            try:
+                from .tasks import send_welcome_email_task
+
+                send_welcome_email_task.delay(user.email, user.first_name, raw_password)
+            except Exception:
+                email_thread = threading.Thread(
+                    target=RegisterSerializer.send_welcome_email_task,
+                    args=(user.email, user.first_name, raw_password)
+                )
+                email_thread.daemon = True
+                email_thread.start()
+
+        transaction.on_commit(trigger_welcome_email)
 
         return user
     

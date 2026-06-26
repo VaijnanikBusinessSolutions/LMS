@@ -2,6 +2,7 @@ from tokenize import Comment
 from django.conf import settings
 from django.shortcuts import render
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from Dojo2_0.api import LargeResultsSetPagination
 
 # Create your views here.
 
@@ -274,6 +275,7 @@ from .serializers import RegisterSerializer, RoleSerializer
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().select_related("role")
     serializer_class = RegisterSerializer
+    pagination_class = LargeResultsSetPagination
 
     def get_permissions(self):
         if self.action in ["create"]:
@@ -289,6 +291,7 @@ class UserViewSet(viewsets.ModelViewSet):
 class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
+    pagination_class = LargeResultsSetPagination
 
     def get_permissions(self):
         if self.action in ["create", "list"]:
@@ -342,6 +345,7 @@ from .serializers import (
 class HqViewSet(viewsets.ModelViewSet):
     queryset = Hq.objects.all()
     serializer_class = HqSerializer
+    pagination_class = LargeResultsSetPagination
     
     def get_queryset(self):
         queryset = Hq.objects.all().order_by('hq_name')
@@ -352,6 +356,7 @@ class FactoryViewSet(viewsets.ModelViewSet):
     serializer_class = FactorySerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['hq']
+    pagination_class = LargeResultsSetPagination
     
     def get_queryset(self):
         queryset = Factory.objects.all().select_related('hq').order_by('factory_name')
@@ -365,6 +370,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     serializer_class = DepartmentSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['factory', 'hq']
+    pagination_class = LargeResultsSetPagination
     
 
     def get_queryset(self):
@@ -385,6 +391,7 @@ class LineViewSet(viewsets.ModelViewSet):
     serializer_class = LineSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['department', 'factory', 'hq']
+    pagination_class = LargeResultsSetPagination
     
     def get_queryset(self):
         queryset = Line.objects.all().select_related('department', 'factory', 'hq').order_by('line_name')
@@ -406,6 +413,7 @@ class SubLineViewSet(viewsets.ModelViewSet):
     serializer_class = SubLineSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['line', 'department', 'factory', 'hq']
+    pagination_class = LargeResultsSetPagination
     
     def get_queryset(self):
         queryset = SubLine.objects.all().select_related('line', 'department', 'factory', 'hq').order_by('subline_name')
@@ -430,6 +438,7 @@ class StationViewSet(viewsets.ModelViewSet):
     serializer_class = StationSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['subline', 'line', 'department', 'factory', 'hq']
+    pagination_class = LargeResultsSetPagination
     
     def get_queryset(self):
         queryset = Station.objects.all().select_related('subline', 'line', 'department', 'factory', 'hq').order_by('station_name')
@@ -2640,6 +2649,7 @@ class HqViewSet(viewsets.ModelViewSet):
     queryset = Hq.objects.all()
     serializer_class = HqSerializer
     parser_classes = [JSONParser, FormParser, MultiPartParser]
+    pagination_class = LargeResultsSetPagination
 
     def get_serializer(self, *args, **kwargs):
         if hasattr(self.request, "data"):
@@ -2705,6 +2715,7 @@ class HqViewSet(viewsets.ModelViewSet):
 class FactoryViewSet(viewsets.ModelViewSet):
     queryset = Factory.objects.all()
     serializer_class = FactorySerializer
+    pagination_class = LargeResultsSetPagination
     
     def create(self, request, *args, **kwargs):
         print("\n=== Incoming Request ===")
@@ -2756,6 +2767,7 @@ class FactoryViewSet(viewsets.ModelViewSet):
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
+    pagination_class = LargeResultsSetPagination
 
     def create(self, request, *args, **kwargs):
         print("\n=== Incoming Department Request ===")
@@ -2800,6 +2812,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
 class LineViewSet(viewsets.ModelViewSet):
     queryset = Line.objects.all()
     serializer_class = LineSerializer
+    pagination_class = LargeResultsSetPagination
 
     def create(self, request, *args, **kwargs):
         print("\n=== Incoming Line Request ===")
@@ -2844,6 +2857,7 @@ class LineViewSet(viewsets.ModelViewSet):
 class SubLineViewSet(viewsets.ModelViewSet):
     queryset = SubLine.objects.all()
     serializer_class = SubLineSerializer
+    pagination_class = LargeResultsSetPagination
 
     def create(self, request, *args, **kwargs):
         print("\n=== Incoming SubLine Request ===")
@@ -2888,6 +2902,7 @@ class SubLineViewSet(viewsets.ModelViewSet):
 class StationViewSet(viewsets.ModelViewSet):
     queryset = Station.objects.all()
     serializer_class = StationSerializer
+    pagination_class = LargeResultsSetPagination
 
     def create(self, request, *args, **kwargs):
         print("\n=== Incoming Station Request ===")
@@ -6392,6 +6407,7 @@ from .serializers import EmployeeAttendanceSerializer, RescheduleLogSerializer
 class EmployeeAttendanceViewSet(viewsets.ModelViewSet):
     queryset = EmployeeAttendance.objects.all()
     serializer_class = EmployeeAttendanceSerializer
+    pagination_class = LargeResultsSetPagination
 
     # def partial_update is newly added 
     def partial_update(self, request, *args, **kwargs):
@@ -9394,6 +9410,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
     """
     serializer_class = NotificationSerializer
     permission_classes = [AllowAny]
+    pagination_class = LargeResultsSetPagination
 
     def get_queryset(self):
         return Notification.objects.all().select_related(
@@ -9752,6 +9769,7 @@ class DailyProductionDataViewSet(viewsets.ModelViewSet):
     """
     queryset = DailyProductionData.objects.all()
     serializer_class = DailyProductionDataSerializer
+    pagination_class = LargeResultsSetPagination
 
     def get_queryset(self):
         """

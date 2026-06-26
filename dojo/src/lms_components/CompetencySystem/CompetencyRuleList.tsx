@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronUp, Layers, ArrowRight,
   PlusCircle, MapPin, LayoutGrid, Building2, Globe
 } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 // ==========================================
 // 1. TYPES & INTERFACES
@@ -61,7 +62,7 @@ const CompetencyRuleList: React.FC = () => {
     try {
       const response = await fetch(`${API_BASE}/rules/`, { headers: getAuthHeaders() });
       if (response.ok) {
-        setRules(await response.json());
+        setRules(normalizeListResponse<CompetencyRule>(await response.json()));
       }
     } catch (error) { console.error("Failed to fetch rules", error); } 
     finally { setLoading(false); }

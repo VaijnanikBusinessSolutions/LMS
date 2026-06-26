@@ -24,6 +24,19 @@ interface NotificationItem {
   related_object_id?: number; 
 }
 
+const normalizeNotifications = (payload: unknown): NotificationItem[] => {
+  if (Array.isArray(payload)) return payload as NotificationItem[];
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'results' in payload &&
+    Array.isArray((payload as { results?: unknown }).results)
+  ) {
+    return (payload as { results: NotificationItem[] }).results;
+  }
+  return [];
+};
+
 interface NotificationPageProps {
   selectedRole?: string; 
 }
@@ -65,7 +78,7 @@ const NotificationPage: React.FC<NotificationPageProps> = ({ selectedRole }) => 
       if (!response.ok) throw new Error('Failed to fetch notifications');
 
       const data = await response.json();
-      setNotifications(data);
+      setNotifications(normalizeNotifications(data));
       setError(null);
     } catch (err) {
       setError('Could not load notifications');

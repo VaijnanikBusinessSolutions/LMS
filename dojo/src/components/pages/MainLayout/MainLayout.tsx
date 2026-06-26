@@ -218,13 +218,32 @@ import NL_Logo from '../../../assets/Images/nl_technologies_logo.png';
 import NL_Logo_White from '../../../assets/Images/nl_white_logo.png';
 import { FooterNew } from "../../organisms/Footer copy/FooterNew";
 
+type NotificationItem = {
+    id: number;
+    is_read: boolean;
+    [key: string]: unknown;
+};
+
+const normalizeNotifications = (payload: unknown): NotificationItem[] => {
+    if (Array.isArray(payload)) return payload as NotificationItem[];
+    if (
+        payload &&
+        typeof payload === "object" &&
+        "results" in payload &&
+        Array.isArray((payload as { results?: unknown }).results)
+    ) {
+        return (payload as { results: NotificationItem[] }).results;
+    }
+    return [];
+};
+
 const MainLayout = () => {
     const { designMode } = useDesign();
     const { theme } = useTheme();
 
     const [companyLogo, setCompanyLogo] = useState<{ logo: string } | null>(null);
     const [logoLoading, setLogoLoading] = useState(true);
-    const [notifications, setNotifications] = useState([]);
+    const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
 
     const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -255,8 +274,9 @@ const MainLayout = () => {
             if (response.status === 401) { handleLogout(); return; }
             if (response.ok) {
                 const data = await response.json();
-                setNotifications(data);
-                setUnreadCount(data.filter((n: any) => !n.is_read).length);
+                const notificationList = normalizeNotifications(data);
+                setNotifications(notificationList);
+                setUnreadCount(notificationList.filter((n) => !n.is_read).length);
             }
         } catch (err) { console.error("Notification Error:", err); }
     }, [handleLogout]);

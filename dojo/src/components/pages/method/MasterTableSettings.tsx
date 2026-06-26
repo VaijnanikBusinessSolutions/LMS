@@ -954,6 +954,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Upload, Plus, Trash2, FileSpreadsheet, Users, Mail, Phone, Calendar, User, Building2 } from "lucide-react";
+import { normalizeListResponse } from "../../../utils/api";
 
 interface EmployeeData {
   emp_id: string;
@@ -1109,7 +1110,7 @@ const MasterTableSettings: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/departments/`); // Adjust endpoint as needed
       if (!response.ok) throw new Error('Failed to fetch departments');
       const data = await response.json();
-      setDepartments(data);
+      setDepartments(normalizeListResponse<Department>(data));
     } catch (error) {
       console.error('Error fetching departments:', error);
       // Set fallback departments if API fails

@@ -426,6 +426,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Bell, Calendar, Clock, Users, MapPin, Filter, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
+import { normalizeListResponse } from '../../../../utils/api';
 
 interface TrainingSession {
   id: string;
@@ -466,7 +467,7 @@ const Notification: React.FC = () => {
       const res = await fetch('http://localhost:8000/schedules/'); 
       if (res.ok) {
         const data = await res.json();
-        setTrainingSessions(data);
+        setTrainingSessions(normalizeListResponse<TrainingSession>(data));
       } else {
         setTrainingSessions([]);
       }

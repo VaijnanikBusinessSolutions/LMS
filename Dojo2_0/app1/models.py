@@ -3334,36 +3334,6 @@ class EvaluationPassingCriteria(models.Model):
 # ==================== TrainingBatch ======================== #
     
 
-class TrainingAttendance(models.Model):
-    """ Stores daily attendance for each user in a batch. """
-    STATUS_CHOICES = [
-        ('present', 'Present'),
-        ('absent', 'Absent'),
-    ]
-    
-    user = models.ForeignKey(UserRegistration, on_delete=models.CASCADE, related_name='attendances')
-    batch = models.ForeignKey(TrainingBatch, on_delete=models.CASCADE, related_name='attendances', to_field='batch_id')
-    day_number = models.ForeignKey(Days, on_delete=models.CASCADE, related_name='day_attendances')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
-    
-    # --- NEW FIELD ---
-    # This field will store the actual calendar date the attendance was marked on.
-    attendance_date = models.DateField(help_text="The calendar date this attendance was recorded" ,null=True, blank= True)
-    
-    date_marked = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['batch', 'user', 'day_number']
-        # A user can only have one attendance status per day in a given batch.
-        unique_together = ('user', 'batch', 'day_number')
-
-    def _str_(self):
-        return f"{self.user.first_name} - {self.batch.batch_id} - Day {self.day_number}: {self.status}"
-
-    
-
-# ==================== TrainingBatch End ======================== #
- 
 from django.db import models
 from django.utils.timezone import now
 

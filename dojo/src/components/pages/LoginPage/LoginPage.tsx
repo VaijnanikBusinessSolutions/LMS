@@ -50,15 +50,7 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      if (user.role === 'admin') {
-        navigate('/home');
-      } else if (user.role === 'team-leader') {
-        navigate('/home');
-      } else if (user.role === 'employee') {
-        navigate('/home');
-      } else {
-        navigate('/home');
-      }
+      navigate('/home', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -108,7 +100,7 @@ export const LoginPage: React.FC = () => {
         setFormData({ email: '', password: '' });
         
         // Use a full refresh or navigate to ensure the app picks up the new tokens
-        navigate('/home');
+        navigate('/home', { replace: true });
       } else if (login.rejected.match(resultAction)) {
         setError((resultAction.payload as string) || 'Login failed');
       }

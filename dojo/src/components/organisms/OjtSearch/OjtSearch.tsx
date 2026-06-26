@@ -438,6 +438,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Search, X, User, AlertCircle } from "lucide-react";
 import { API_ENDPOINTS } from "../../constants/api";
+import { normalizeListResponse } from "../../../utils/api";
 
 // ✅ Types
 interface Employee {
@@ -501,7 +502,7 @@ const OjtSearch: React.FC = () => {
         setError(null);
         const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.EMPLOYEES}`);
         if (!response.ok) throw new Error(`Error fetching employees: ${response.statusText}`);
-        const data: Employee[] = await response.json();
+        const data = normalizeListResponse<Employee>(await response.json());
         setEmployees(data);
         setFilteredEmployees(data.map(emp => ({ ...emp, eligible: true, eligibilityMessage: "" })));
       } catch (error: any) {

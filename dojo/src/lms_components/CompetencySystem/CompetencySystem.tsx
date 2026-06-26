@@ -1723,6 +1723,7 @@ import {
   Trophy, Medal, ArrowRight, Eye, Printer, FileText, TrendingDown,
   Minus, ChevronUp
 } from 'lucide-react';
+import { normalizeListResponse } from '../../utils/api';
 
 const API_BASE = 'http://127.0.0.1:8000/lms';
 
@@ -1935,18 +1936,23 @@ const CompetencySystem: React.FC = () => {
                 fetchSafe(`${API_BASE}/library/assessment_structure/`)
             ]);
 
-            if (Array.isArray(orgData)) {
-                setHqs(orgData.filter((n: any) => n.org_type === 'hq'));
-                setBus(orgData.filter((n: any) => n.org_type === 'bu'));
-                setDepartments(orgData.filter((n: any) => n.org_type === 'dept'));
-                setSections(orgData.filter((n: any) => n.org_type === 'section'));
-                setDesignations(orgData.filter((n: any) => n.org_type === 'designation'));
+            const safeOrgData = normalizeListResponse<any>(orgData);
+            const safeRuleData = normalizeListResponse<any>(ruleData);
+            const safeQuestionData = normalizeListResponse<any>(quesData);
+            const safeEmployeeData = normalizeListResponse<any>(empData);
+
+            if (safeOrgData.length > 0) {
+                setHqs(safeOrgData.filter((n: any) => n.org_type === 'hq'));
+                setBus(safeOrgData.filter((n: any) => n.org_type === 'bu'));
+                setDepartments(safeOrgData.filter((n: any) => n.org_type === 'dept'));
+                setSections(safeOrgData.filter((n: any) => n.org_type === 'section'));
+                setDesignations(safeOrgData.filter((n: any) => n.org_type === 'designation'));
             }
 
-            if (Array.isArray(ruleData)) setRules(ruleData);
-            if (Array.isArray(quesData)) setCategories(quesData);
-            if (Array.isArray(empData)) {
-                setEmployees(empData.map((e: any) => ({
+            setRules(safeRuleData);
+            setCategories(safeQuestionData);
+            if (safeEmployeeData.length > 0) {
+                setEmployees(safeEmployeeData.map((e: any) => ({
                     id: e.id,
                     name: e.name || e.email, 
                     email: e.email,
@@ -1956,6 +1962,8 @@ const CompetencySystem: React.FC = () => {
                     department: e.department ?? e.department_name ?? null,
                     section: e.section ?? e.section_name ?? null
                 })));
+            } else {
+                setEmployees([]);
             }
         }
       } catch (err) { 

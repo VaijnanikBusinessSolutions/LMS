@@ -42,6 +42,7 @@
 
 
 from django.apps import AppConfig
+from django.conf import settings
 import sys
 import os
 
@@ -63,6 +64,9 @@ class App1Config(AppConfig):
             'makemigrations', 'migrate', 'test',
             'shell', 'createsuperuser'
         ]):
+            return
+
+        if not settings.ENABLE_APSCHEDULER:
             return
 
         # Import scheduler module

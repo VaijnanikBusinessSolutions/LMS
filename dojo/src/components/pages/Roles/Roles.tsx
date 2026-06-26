@@ -1120,6 +1120,7 @@ import {
   FileUp
 } from "lucide-react";
 import { useSelector } from "react-redux";
+import { normalizeListResponse } from "../../../utils/api";
 
 // --- INTERFACES ---
 interface Employee {
@@ -1295,10 +1296,12 @@ const EmployeeTable: React.FC = () => {
           fetch("http://127.0.0.1:8000/lms/organization/", { headers })
         ]);
 
-        if (rolesRes.ok) setRoles(await rolesRes.json());
+        if (rolesRes.ok) {
+          setRoles(normalizeListResponse<Role>(await rolesRes.json()));
+        }
 
         if (usersRes.ok) {
-          const users = await usersRes.json();
+          const users = normalizeListResponse<any>(await usersRes.json());
           const formattedUsers = users.map((u: any) => ({
             id: String(u.id),
             first_name: u.first_name,
@@ -1316,7 +1319,7 @@ const EmployeeTable: React.FC = () => {
 
         // Process Org Structure
         if (orgRes.ok) {
-          const orgData: OrgItem[] = await orgRes.json();
+          const orgData = normalizeListResponse<OrgItem>(await orgRes.json());
 
           setOrgHqs(orgData.filter(item => item.org_type === 'hq'));
           setOrgBusinessUnits(orgData.filter(item => item.org_type === 'bu'));

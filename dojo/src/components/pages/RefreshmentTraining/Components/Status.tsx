@@ -699,6 +699,7 @@ import {
   BarChart2,
 } from 'lucide-react';
 import TrainingEffectivenessReport from './TrainingEffectivenessReport';
+import { normalizeListResponse } from '../../../../utils/api';
 
 const API_BASE = 'http://127.0.0.1:8000';
 
@@ -812,9 +813,10 @@ const Status: React.FC = () => {
       const categoriesData = await categoriesRes.json();
       const topicsData = await topicsRes.json();
 
-      setTrainingSessions(sessionsData);
-      setTrainingCategories(categoriesData);
-      setTrainingTopics(topicsData);
+      const sessions = normalizeListResponse<TrainingSession>(sessionsData);
+      setTrainingSessions(sessions);
+      setTrainingCategories(normalizeListResponse<TrainingCategory>(categoriesData));
+      setTrainingTopics(normalizeListResponse<TrainingTopic>(topicsData));
 
       let allAttendances: EmployeeStatus[] = [];
 
@@ -832,7 +834,7 @@ const Status: React.FC = () => {
         }
 
         if (allAttendances.length === 0) {
-          for (const session of sessionsData) {
+          for (const session of sessions) {
             try {
               const sessionAttendanceRes = await fetch(
                 `${API_BASE}/attendances/by_schedule/?schedule_id=${session.id}`

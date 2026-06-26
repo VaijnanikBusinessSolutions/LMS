@@ -136,7 +136,7 @@ const NotificationPopup: React.FC = () => {
 
         const checkNotifications = async () => {
             try {
-                const userRes = await fetch("http://127.0.0.1:8000/users/me/", {
+                const userRes = await fetch("http://127.0.0.1:8000/lms/users/me/", {
                     headers: { "Authorization": `Bearer ${accessToken}` }
                 });
 
@@ -145,14 +145,15 @@ const NotificationPopup: React.FC = () => {
                     setCurrentUserId(String(userData.id));
                 }
 
-                const notifRes = await fetch("http://127.0.0.1:8000/notifications/unread/", {
+                const notifRes = await fetch("http://127.0.0.1:8000/lms/notifications/unread_count/", {
                     headers: { "Authorization": `Bearer ${accessToken}` }
                 });
 
                 if (notifRes.ok) {
                     const notifData = await notifRes.json();
-                    if (notifData.count > 0) {
-                        setNotificationCount(notifData.count);
+                    const unreadCount = Number(notifData.unread_count || 0);
+                    if (unreadCount > 0) {
+                        setNotificationCount(unreadCount);
                         setShowModal(true);
                     }
                 }

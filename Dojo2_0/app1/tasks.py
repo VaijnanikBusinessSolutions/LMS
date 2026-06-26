@@ -1,8 +1,43 @@
-
 import os
+import logging
+
 from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
+from django.core.management import call_command
 from tablib import Dataset
+
 from .resources import BiometricAttendanceResource
+
+
+logger = logging.getLogger(__name__)
+
+
+@shared_task
+def send_welcome_email_task(email, first_name, raw_password):
+    subject = 'Account Created - Dojo LMS Login Details'
+    email_body = f"""
+Hello {first_name},
+
+Welcome to the VTrain LMS Platform. Your account has been created by the administrator.
+
+Here are your login credentials:
+--------------------------------------------------
+Username: {email}
+Password: {raw_password}
+--------------------------------------------------
+
+Best Regards,
+Admin Team
+    """
+
+    send_mail(
+        subject,
+        email_body,
+        settings.DEFAULT_FROM_EMAIL,
+        [email],
+        fail_silently=True,
+    )
 
 @shared_task
 def import_attendance_from_excel():
@@ -33,19 +68,6 @@ def import_attendance_from_excel():
 
     resource.import_data(imported_data, dry_run=False)
     return {'status': 'success', 'message': 'Data imported successfully'}
-
-# from celery import shared_task
-# from django.core.management import call_command
-
-# @shared_task
-# def create_recurring_schedules():
-#     call_command('create_recurring_schedules')
-
-from celery import shared_task
-from django.core.management import call_command
-import logging
-
-logger = logging.getLogger(__name__)
 
 @shared_task
 def create_recurring_schedules():

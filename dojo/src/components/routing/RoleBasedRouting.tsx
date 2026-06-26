@@ -26,7 +26,7 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({ allowedRoles }) => {
     // Redirect them to their designated dashboard based on their actual role
     switch (user.role) {
       case 'admin':
-        return <Navigate to="/admin/dashboard" replace />;
+        return <Navigate to="/lms/admin" replace />;
       case 'team-leader':
         return <Navigate to="/team-lead/dashboard" replace />;
       case 'employee':

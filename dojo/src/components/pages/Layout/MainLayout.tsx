@@ -11,6 +11,7 @@ import { logout, clearAuth } from "../../hooks/useAuth";
 import { type TabId } from "../../constants/tileData";
 import type { RootState, AppDispatch } from "../../../store/store";
 import NL_Logo from '../../../assets/Images/nl_technologies_logo.png';
+import { normalizeListResponse } from "../../../utils/api";
 
 const localhostout = () => {
     const [companyLogo, setCompanyLogo] = useState<{ logo: string } | null>(null);
@@ -56,8 +57,9 @@ const localhostout = () => {
             if (response.status === 401) { handleLogout(); return; }
             if (response.ok) {
                 const data = await response.json();
-                setNotifications(data);
-                setUnreadCount(data.filter((n: any) => !n.is_read).length);
+                const notificationList = normalizeListResponse<any>(data);
+                setNotifications(notificationList);
+                setUnreadCount(notificationList.filter((n: any) => !n.is_read).length);
             }
         } catch (err) { console.error("Notification Error:", err); }
     }, [handleLogout]);// Included handleLogout in dependencies
