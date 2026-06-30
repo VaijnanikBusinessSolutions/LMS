@@ -502,14 +502,11 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ChevronRight, Star, BookOpen, GraduationCap,
-  ClipboardCheck, Users, IdCard, Calendar,
-  List, FileText, Activity, ShieldCheck,
-  Settings, BarChart3, Search, Bell,
-  Briefcase, Layout, Wrench, MousePointer2,
-  Shield, PenTool, ClipboardList, UserCheck, Zap,Bot
+  ChevronRight, Star, BookOpen, Calendar,
+  BarChart3, Layout,
+  Shield, PenTool, ClipboardList, UserCheck, Bot
 } from 'lucide-react';
-import { linkPermissions } from '../../constants/permissions';
+import { getAllowedLinksForTile } from '../../constants/permissions';
 
 interface TileProps {
   title: string;
@@ -579,9 +576,9 @@ const Tile: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled = f
 
   const filteredLinks = useMemo(() => {
     if (userRole && tileId) {
-      const rolePerms = (linkPermissions as any)[userRole];
-      const perms = rolePerms ? rolePerms[tileId] : null;
-      if (perms) return (links || []).filter((l: any) => perms.includes(l.name));
+      const auth = JSON.parse(localStorage.getItem('auth') || '{}');
+      const effectiveUser = auth?.user || { role: userRole };
+      return getAllowedLinksForTile(effectiveUser, tileId, links || []);
     }
     return links || [];
   }, [links, userRole, tileId]);

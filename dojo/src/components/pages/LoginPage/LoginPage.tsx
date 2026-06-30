@@ -8,6 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import type { RootState } from '../../../store/store';
 import { login } from '../../hooks/useAuth';
+import { resolveDefaultLandingPath } from '../../constants/permissions';
 import NLlogo from '../../../assets/Images/nl_technologies_logo.png';
 
 interface LoginFormState {
@@ -50,7 +51,7 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate('/home', { replace: true });
+      navigate(resolveDefaultLandingPath(user), { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -98,9 +99,7 @@ export const LoginPage: React.FC = () => {
         // ===============================================
 
         setFormData({ email: '', password: '' });
-        
-        // Use a full refresh or navigate to ensure the app picks up the new tokens
-        navigate('/home', { replace: true });
+        navigate(resolveDefaultLandingPath(payload?.user), { replace: true });
       } else if (login.rejected.match(resultAction)) {
         setError((resultAction.payload as string) || 'Login failed');
       }
@@ -311,7 +310,7 @@ export const LoginPage: React.FC = () => {
                             ? 'border-red-500/50'
                             : 'border-border hover:border-[rgb(var(--brand-primary))/0.5]'
                         }`}
-                        placeholder="name@company.com"
+                        placeholder="Email or employee ID"
                       />
                     </div>
                     {errors.email && (

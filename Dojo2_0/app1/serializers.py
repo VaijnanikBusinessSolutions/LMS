@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from .models import CTQandPDIdepartment, DailyProductionData, HumanBodyCheckSession, HumanBodyCheckSheet, HumanBodyQuestions, Level2QuantityOJTEvaluation, LevelColour, ManagementReviewCTQandPDI, MasterTable, OJTLevel2Quantity, RefresherBatch, User, UserRegistration
 from django.contrib.auth import authenticate
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from .models import Hq, Factory, Department, Line, SubLine, Station
@@ -19,19 +20,23 @@ from rest_framework.exceptions import ValidationError
 from .models import User, Role
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(max_length=100)
+    email = serializers.CharField(max_length=100)
     password = serializers.CharField(max_length=128, write_only=True)
 
     def validate(self, attrs):
-        email = attrs.get('email', '').strip()
+        identifier = attrs.get('email', '').strip()
         password = attrs.get('password', '')
 
-        if not email or not password:
-            raise ValidationError({'error': _('Email and password are required.')})
+        if not identifier or not password:
+            raise ValidationError({'error': _('Email or employee ID and password are required.')})
 
-        user = authenticate(request=self.context.get('request'), email=email, password=password)
+        user = (
+            User.objects.select_related('role')
+            .filter(Q(email__iexact=identifier) | Q(employeeid__iexact=identifier))
+            .first()
+        )
 
-        if user is None:
+        if user is None or not user.check_password(password):
             raise ValidationError({'error': _('Invalid email or password.')})
 
         if not user.is_active:
@@ -40,6 +45,7 @@ class LoginSerializer(serializers.Serializer):
         # IMPORTANT: only store JSON-serializable primitives in validated_data
         attrs['user_id'] = user.pk
         attrs['email'] = user.email
+        attrs['login_identifier'] = identifier
         # store role name instead of Role model instance
         attrs['role_name'] = getattr(user.role, 'name', None)
         return attrs
@@ -55,13 +61,99 @@ class LogoutSerializer(serializers.Serializer):
         return value
 
 from rest_framework import serializers
-from .models import Role, User
+from django.contrib.auth.models import Permission
+from .models import PermissionModule, Role, User
+from .rbac import RBAC_ACTIONS, RBAC_MODULES, build_permission_codename, normalize_module_slug
 
 class RoleSerializer(serializers.ModelSerializer):
+    permission_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    permissions = serializers.SerializerMethodField(read_only=True)
+    user_count = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Role
-        fields = ['id', 'name', 'is_active', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'is_active', 'created_at', 'updated_at', 'permissions', 'permission_ids', 'user_count']
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_permissions(self, obj):
+        role_permissions = {
+            permission.codename: permission
+            for permission in obj.permissions.filter(content_type__app_label='app1').select_related('content_type')
+        }
+        serialized_permissions = []
+
+        for module_slug, config in RBAC_MODULES.items():
+            item = {
+                'module_slug': module_slug,
+                'module_name': config['name'],
+            }
+            for action in RBAC_ACTIONS.keys():
+                item[action] = build_permission_codename(module_slug, action) in role_permissions
+            serialized_permissions.append(item)
+
+        return serialized_permissions
+
+    def get_user_count(self, obj):
+        return obj.users.count()
+
+    def create(self, validated_data):
+        permission_ids = validated_data.pop('permission_ids', [])
+        role = super().create(validated_data)
+        if permission_ids:
+            role.permissions.set(Permission.objects.filter(id__in=permission_ids))
+        return role
+
+    def update(self, instance, validated_data):
+        permission_ids = validated_data.pop('permission_ids', None)
+        role = super().update(instance, validated_data)
+        if permission_ids is not None:
+            role.permissions.set(Permission.objects.filter(id__in=permission_ids))
+        return role
+
+
+class PermissionModuleSerializer(serializers.ModelSerializer):
+    available_permissions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PermissionModule
+        fields = ['id', 'slug', 'name', 'description', 'sort_order', 'is_active', 'available_permissions']
+
+    def get_available_permissions(self, obj):
+        module_slug = normalize_module_slug(obj.slug)
+        codenames = [build_permission_codename(module_slug, action) for action in RBAC_ACTIONS.keys()]
+        permissions = Permission.objects.filter(
+            content_type__app_label='app1',
+            codename__in=codenames,
+        ).order_by('codename')
+        return [
+            {
+                'id': permission.id,
+                'codename': permission.codename,
+                'name': permission.name,
+            }
+            for permission in permissions
+        ]
+
+
+class UserRBACSerializer(serializers.ModelSerializer):
+    role = serializers.CharField(source='role.name', read_only=True)
+    permissions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'email', 'employeeid', 'first_name', 'last_name',
+            'role', 'designation', 'business_unit', 'department',
+            'section', 'hq', 'line', 'subline', 'factory', 'status',
+            'is_active', 'permissions',
+        ]
+
+    def get_permissions(self, obj):
+        return obj.get_accessible_modules()
 
 
 # import threading  # <--- THIS WAS MISSING. YOU MUST ADD THIS LINE.

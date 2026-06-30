@@ -1089,18 +1089,14 @@ import React, { useState, useMemo, useEffect } from "react";
 import type { RootState } from "../../../store/store";
 import {
   Search,
-  Plus,
   Mail,
   Users,
   Shield,
-  Star,
   X,
   BadgeCheck,
   Briefcase,
   LayoutGrid,
-  Building2,
   Loader2,
-  Sparkles,
   UserPlus,
   ChevronRight,
   Check,
@@ -1110,10 +1106,7 @@ import {
   MapPin,
   Layers,
   Crown,
-  Zap,
-  Filter,
   RotateCcw,
-  UserCircle,
   Building,
   Award,
   Download,
@@ -1140,6 +1133,17 @@ interface Employee {
 interface Role {
   id: number;
   name: string;
+  permissions?: Array<{
+    module_slug: string;
+    module_name: string;
+    view?: boolean;
+    create?: boolean;
+    update?: boolean;
+    delete?: boolean;
+    approve?: boolean;
+    export?: boolean;
+    manage?: boolean;
+  }>;
 }
 
 interface OrgItem {
@@ -1293,7 +1297,7 @@ const EmployeeTable: React.FC = () => {
         const [rolesRes, usersRes, orgRes] = await Promise.all([
           fetch("http://127.0.0.1:8000/roles/", { headers }),
           fetch("http://127.0.0.1:8000/users/", { headers }),
-          fetch("http://127.0.0.1:8000/lms/organization/", { headers })
+          fetch("http://127.0.0.1:8000/lms/organization/", { headers }),
         ]);
 
         if (rolesRes.ok) {
@@ -1442,6 +1446,26 @@ const EmployeeTable: React.FC = () => {
   }, [employees, searchTerm, selectedDepartment, selectedBusinessUnit, selectedRole]);
 
   const activeFiltersCount = [selectedDepartment, selectedBusinessUnit, selectedRole].filter(Boolean).length;
+
+  const selectedRoleDefinition = useMemo(
+    () => roles.find((role) => role.name === formData.role) || null,
+    [roles, formData.role]
+  );
+
+  const selectedRoleModules = useMemo(() => {
+    if (!selectedRoleDefinition?.permissions) return [];
+
+    return selectedRoleDefinition.permissions
+      .map((permission) => {
+        const actions = ['view', 'create', 'update', 'delete', 'approve', 'export', 'manage']
+          .filter((action) => (permission as Record<string, unknown>)[action]);
+        return {
+          module_name: permission.module_name,
+          actions,
+        };
+      })
+      .filter((permission) => permission.actions.length > 0);
+  }, [selectedRoleDefinition]);
 
   const clearAllFilters = () => {
     setSearchTerm("");
@@ -2039,6 +2063,53 @@ const EmployeeTable: React.FC = () => {
                     icon={BadgeCheck}
                   />
                 </div>
+
+                {formData.role && (
+                  <div className="rounded-2xl border-2 border-violet-100 dark:border-violet-900/50 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 p-5">
+                    <div className="flex flex-col gap-4">
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-widest text-violet-600 dark:text-violet-300">
+                          Account Access Preview
+                        </div>
+                        <h4 className="mt-2 text-lg font-black text-slate-900 dark:text-white">
+                          {formData.role}
+                        </h4>
+                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                          This account will inherit the permissions configured for the selected role.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                        {selectedRoleModules.slice(0, 8).map((item: any) => (
+                          <div
+                            key={item.module_name}
+                            className="rounded-xl bg-white/80 dark:bg-slate-900/60 border border-violet-100 dark:border-slate-800 p-3"
+                          >
+                            <div className="text-sm font-black text-slate-800 dark:text-slate-100">
+                              {item.module_name}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(item.actions || []).map((action: string) => (
+                                <span
+                                  key={action}
+                                  className="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300"
+                                >
+                                  {action}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {!selectedRoleModules.length && (
+                        <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                          No active permissions are configured for this role yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Organization Section */}

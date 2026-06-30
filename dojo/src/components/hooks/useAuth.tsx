@@ -1,7 +1,7 @@
 // src/store/authSlice.ts
 import { createSlice, createAsyncThunk, type PayloadAction } from "@reduxjs/toolkit";
 import { authAPI } from "../utils/loginApi";
-import type { LoginResponse, UserRole } from "../constants/types";
+import type { LoginResponse, PermissionAccess, UserRole } from "../constants/types";
 
 interface User {
   id: number;
@@ -14,6 +14,7 @@ interface User {
   factory: string;
   department: string;
   status: boolean;
+  permissions?: Record<string, PermissionAccess>;
 }
 
 interface AuthState {
@@ -40,7 +41,7 @@ export const login = createAsyncThunk<LoginResponse, { email: string; password: 
       const response = await authAPI.login(credentials);
       return response;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data || "Login failed");
+      return rejectWithValue(error?.message || "Login failed");
     }
   }
 );

@@ -8,7 +8,7 @@ from Dojo2_0.api import LargeResultsSetPagination
 
 from functools import cache
 from django.shortcuts import get_list_or_404, render
-from .serializers import CompanyLogoSerializer, KeyEventSerializer, MasterTableSerializer, RegisterSerializer, ScoreSerializer, SimpleScoreSerializer
+from .serializers import CompanyLogoSerializer, KeyEventSerializer, MasterTableSerializer, PermissionModuleSerializer, RegisterSerializer, RoleSerializer, ScoreSerializer, SimpleScoreSerializer, UserRBACSerializer
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
@@ -35,12 +35,14 @@ from django.contrib.auth import login
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import ValidationError
 
 from .serializers import LoginSerializer
-from .models import User
+from .models import PermissionModule, User
+from .permissions import RBACPermission
+from .rbac import RBAC_MODULES
 
 def dojo_app(request):
     return render(request, 'index.html')
@@ -104,6 +106,7 @@ class LoginAPIView(APIView):
             'department': getattr(getattr(user, 'department', None), 'name', getattr(user, 'department', None)),
             'status': getattr(user, 'status', None),
             'designation': getattr(getattr(user, 'designation', None), 'name', getattr(user, 'designation', None)),
+            'permissions': user.get_accessible_modules(),
         }
 
         return Response({
@@ -129,8 +132,12 @@ from .models import CompanyLogo, KeyEvent, MasterTable, Score, TestSession, User
 
 class RegisterView(generics.GenericAPIView):
     serializer_class = RegisterSerializer
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if not request.user.has_module_permission('users', 'create'):
+            return Response({"message": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+
         user_data = request.data
         serializer = self.serializer_class(data=user_data)
 
@@ -191,9 +198,12 @@ from .models import User, Role
 
 class BulkEmployeeView(APIView):
     parser_classes = [MultiPartParser]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """Generates an Excel Template with existing roles for reference."""
+        if not request.user.has_module_permission('users', 'export'):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
         # Create a sample structure
         data = {
             'first_name': ['John'], 'last_name': ['Doe'], 
@@ -215,6 +225,8 @@ class BulkEmployeeView(APIView):
 
     def post(self, request):
         """Handles Bulk Upload with better error reporting."""
+        if not request.user.has_module_permission('users', 'create'):
+            return Response({"error": "Permission denied."}, status=status.HTTP_403_FORBIDDEN)
         file = request.FILES.get('file')
         if not file:
             return Response({"error": "No file uploaded. Use the key 'file' in FormData."}, status=400)
@@ -276,27 +288,38 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().select_related("role")
     serializer_class = RegisterSerializer
     pagination_class = LargeResultsSetPagination
+    permission_classes = [IsAuthenticated, RBACPermission]
+    rbac_module = 'users'
+    rbac_action_map = {'me': 'view'}
 
-    def get_permissions(self):
-        if self.action in ["create"]:
-            return [AllowAny()]  # registration allowed for unauthenticated
-        return [IsAuthenticated()]
+    def get_serializer_class(self):
+        if self.action in ['list', 'retrieve', 'me']:
+            return UserRBACSerializer
+        return RegisterSerializer
 
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me(self, request):
         """Return current user info"""
-        serializer = self.get_serializer(request.user)
+        serializer = UserRBACSerializer(request.user)
         return Response(serializer.data)
 
 class RoleViewSet(viewsets.ModelViewSet):
-    queryset = Role.objects.all()
+    queryset = Role.objects.all().prefetch_related('permissions')
     serializer_class = RoleSerializer
     pagination_class = LargeResultsSetPagination
+    permission_classes = [IsAuthenticated, RBACPermission]
+    rbac_module = 'roles'
 
-    def get_permissions(self):
-        if self.action in ["create", "list"]:
-            return [AllowAny()]  # Allow unauthenticated users to create and list roles
-        return [IsAuthenticated()]
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class PermissionModuleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = PermissionModule.objects.all()
+    serializer_class = PermissionModuleSerializer
+    pagination_class = None
+    permission_classes = [IsAuthenticated, RBACPermission]
+    rbac_module = 'roles'
 
 
 #(3) Views for the User Logout

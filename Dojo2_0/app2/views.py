@@ -777,7 +777,7 @@ class GroupViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not hasattr(user, 'lms_profile'): return Group.objects.none()
 
-        if user.is_staff: return Group.objects.all()
+        if user.has_module_permission('groups', 'manage'): return Group.objects.all()
         if user.lms_profile.userType == 'team-leader': return user.led_groups.all()
         if user.lms_profile.userType == 'employee': return user.member_of_groups.all()
         return Group.objects.none()
@@ -796,7 +796,7 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
         if not hasattr(user, 'lms_profile'): 
             return CourseAssignment.objects.none()
 
-        if user.is_staff: 
+        if user.has_module_permission('courses', 'manage'):
             return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').all()
         if user.lms_profile.userType == 'team-leader': 
             return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').filter(assigned_by=user)
@@ -869,8 +869,12 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
         created_count = 0
         skipped_count = 0
 
-        if not (user.is_staff or (hasattr(user, 'lms_profile') and user.lms_profile.userType == 'team-leader')):
-             return Response({"error": "Only staff or team leaders can assign courses."}, status=status.HTTP_403_FORBIDDEN)
+        if not (
+            user.has_module_permission('courses', 'create')
+            or user.has_module_permission('courses', 'manage')
+            or (hasattr(user, 'lms_profile') and user.lms_profile.userType == 'team-leader')
+        ):
+             return Response({"error": "Only authorized users can assign courses."}, status=status.HTTP_403_FORBIDDEN)
 
         for emp_id in employee_ids:
             try:
@@ -1146,7 +1150,7 @@ class AdminUserListViewSet(viewsets.ViewSet):
 
     # --- 1. TOP CARDS STATS ---
     def list(self, request):
-        if not request.user.is_staff:
+        if not request.user.has_module_permission('dashboard', 'manage'):
              return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
 
         return Response({
@@ -1158,7 +1162,7 @@ class AdminUserListViewSet(viewsets.ViewSet):
     # --- 2. MAIN ANALYTICS DATA (Charts & Calendar) ---
     @action(detail=False, methods=['get'])
     def analytics(self, request):
-        if not request.user.is_staff:
+        if not request.user.has_module_permission('dashboard', 'manage'):
              return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
 
         today = timezone.now()
@@ -1250,7 +1254,7 @@ class AdminUserListViewSet(viewsets.ViewSet):
     # --- 3. EXCEL / CSV EXPORT ---
     @action(detail=False, methods=['get'])
     def export_csv(self, request):
-        if not request.user.is_staff: return Response(status=403)
+        if not request.user.has_module_permission('dashboard', 'export'): return Response(status=403)
 
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="LMS_Dashboard_{timezone.now().date()}.csv"'
@@ -1288,7 +1292,7 @@ class AdminUserListViewSet(viewsets.ViewSet):
     # --- 4. PDF EXPORT ---
     @action(detail=False, methods=['get'])
     def export_pdf(self, request):
-        if not request.user.is_staff: return Response(status=403)
+        if not request.user.has_module_permission('dashboard', 'export'): return Response(status=403)
 
         response = HttpResponse(content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="LMS_Report_{timezone.now().date()}.pdf"'
@@ -1358,9 +1362,7 @@ class AdminGrowthReportListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        if not (request.user.is_authenticated and 
-                hasattr(request.user, 'role') and 
-                request.user.role.name == 'admin'): 
+        if not request.user.has_module_permission('reports', 'manage'):
             return Response(
                 {"detail": "You do not have permission to perform this action."},
                 status=status.HTTP_403_FORBIDDEN
@@ -1505,7 +1507,7 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
         qs = LessonAttachment.objects.select_related('lesson', 'lesson__course')
 
         # 1. Admin/Staff see everything
-        if user.is_staff:
+        if user.has_module_permission('courses', 'manage'):
             pass # No filtering needed for admins
 
         # 2. Check LMS Profile for specific roles
@@ -1601,9 +1603,15 @@ class CourseReportStatsView(APIView):
         # 2. Start with All Courses
         courses_qs = Course.objects.all().order_by('-created')
 
+        if user.has_module_permission('reports', 'manage'):
+            user_role = 'manager'
+        elif user.has_module_permission('reports', 'view'):
+            user_role = 'role-based'
+        else:
+            user_role = 'employee'
+
         # 3. APPLY ROLE FILTERING
-        user_role = 'employee' # Default
-        if hasattr(user, 'lms_profile'):
+        if not user.has_module_permission('reports', 'manage') and hasattr(user, 'lms_profile'):
             user_role = user.lms_profile.userType
             
             if user_role == 'team-leader':
@@ -1692,7 +1700,7 @@ class TrainingScheduleViewSet(viewsets.ModelViewSet):
         queryset = TrainingSchedule.objects.select_related('group', 'trainer').all()
 
         # 1. Security: Filter by User Role
-        if not user.is_staff:
+        if not user.has_module_permission('planning', 'manage'):
             if hasattr(user, 'lms_profile'):
                 if user.lms_profile.userType == 'team-leader':
                     queryset = queryset.filter(group__team_leaders=user)

@@ -153,10 +153,34 @@ function App() {
           <Route element={<RequireAuth />}>
             {/* ---> Routes with MainLayout (Navbar, Footer, Sidebar) <--- */}
             <Route element={<MainLayout />}>
+              <Route
+                element={<RoleBasedRoute allowedModules={["admin_dashboard"]} />}
+              >
+                <Route path="/lms/admin" element={<AdminDashboard />} />
+              </Route>
+
+              <Route
+                element={<RoleBasedRoute allowedModules={["team_leader_dashboard"]} />}
+              >
+                <Route
+                  path="/team-lead/dashboard"
+                  element={<SupervisorDashboard />}
+                />
+                <Route
+                  path="/supervisordashboard"
+                  element={<SupervisorDashboard />}
+                />
+              </Route>
+
+              <Route
+                element={<RoleBasedRoute allowedModules={["employee_dashboard"]} />}
+              >
+                <Route path="/lms/dashboard" element={<DashboardView />} />
+              </Route>
+
               {/* A. ADMIN ONLY ROUTES */}
               {/* ONLY Admins can see these. Employees cannot access these. */}
               <Route element={<RoleBasedRoute allowedRoles={["admin"]} />}>
-                <Route path="/lms/admin" element={<AdminDashboard />} />
                 <Route path="/lms/course-list" element={<CourseList />} />
                 <Route
                   path="/lms/growth/compare/:courseId"
@@ -233,14 +257,6 @@ function App() {
                   <RoleBasedRoute allowedRoles={["admin", "team-leader"]} />
                 }
               >
-                <Route
-                  path="/team-lead/dashboard"
-                  element={<SupervisorDashboard />}
-                />
-                <Route
-                  path="/supervisordashboard"
-                  element={<SupervisorDashboard />}
-                />
                 <Route path="/Management" element={<Management />} />
                 <Route path="/Hanchou" element={<Hanchou />} />
                 <Route path="/Shokuchou" element={<Shokuchou />} />
@@ -315,7 +331,6 @@ function App() {
                 {/* <Route path="/home" element={<HomePage />} /> */}
                 <Route path="/home" element={<HomePageContainer />} />
                 <Route path="/employee/dashboard" element={<HomePage />} />
-                <Route path="/lms/dashboard" element={<DashboardView />} />
                 <Route
                   path="/lms/growth/compare/employee/:courseId"
                   element={<EmployeeGrowthReportsPage />}

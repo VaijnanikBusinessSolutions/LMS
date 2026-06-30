@@ -574,7 +574,7 @@ import {
   formLinks,
   type TabId
 } from '../../constants/tileData';
-import { rolePermissions } from '../../constants/permissions';
+import { canAccessTile } from '../../constants/permissions';
 import TilesGrid from '../../organisms/TilesGrid/TilesGrid';
 import TilesGridNew from '../../organisms/TilesGrid copy/TilesGrid';
 import { useDesign } from "../../../context/DesignContext";
@@ -589,7 +589,7 @@ export const HomePage = () => {
 
   const initialTab = (searchParams.get('tab') as TabId) || 'overview';
   const [activeTab] = useState<TabId>(initialTab);
-  const { theme } = useTheme();
+  useTheme();
   const { designMode } = useDesign();
 
   const loadRecents = () => {
@@ -608,23 +608,23 @@ export const HomePage = () => {
     };
   }, []);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const userRole = user?.role as keyof typeof rolePermissions;
+  const auth = JSON.parse(localStorage.getItem('auth') || '{}');
+  const user = auth?.user || {};
+  const userRole = user?.role || 'employee';
   const JOURNEY_ORDER = ['lms-dashboard', 'process-dojo', 'courses', 'department-training', 'groups'];
 
   const filteredTiles = useMemo(() => {
     const allTiles = getTilesByTab(activeTab);
     return allTiles
       .filter(tile => {
-        if (rolePermissions[userRole] === 'ALL') return true;
-        return rolePermissions[userRole]?.includes(tile.id);
+        return canAccessTile(user, tile.id);
       })
       .sort((a, b) => {
         const indexA = JOURNEY_ORDER.indexOf(a.id);
         const indexB = JOURNEY_ORDER.indexOf(b.id);
         return (indexA > -1 ? indexA : 99) - (indexB > -1 ? indexB : 99);
       });
-  }, [activeTab, userRole]);
+  }, [activeTab, user]);
 
   return (
     <motion.div

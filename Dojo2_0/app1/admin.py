@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AnimationVideo, BiometricAttendance, DailyProductionData, HandoverSheet, HierarchyStructure, Hq, Factory, Department, HumanBodyCheckSession, HumanBodyQuestions, LevelDayRequirement, Line, ManagementReviewCTQandPDI, MasterTable, MultiSkilling, OJTLevel2Quantity, ProductionPlan, RescheduledSession, Role, StationManager, StationSetting, SubLine, Station, TrainingBatch, User, UserRegistration
+from .models import AnimationVideo, BiometricAttendance, DailyProductionData, HandoverSheet, HierarchyStructure, Hq, Factory, Department, HumanBodyCheckSession, HumanBodyQuestions, LevelDayRequirement, Line, ManagementReviewCTQandPDI, MasterTable, MultiSkilling, OJTLevel2Quantity, PermissionModule, ProductionPlan, RescheduledSession, Role, RoleModulePermission, StationManager, StationSetting, SubLine, Station, TrainingBatch, User, UserRegistration
 
 class StationInline(admin.TabularInline):
     model = Station
@@ -60,6 +60,26 @@ class StationAdmin(admin.ModelAdmin):
     list_display = ['station_id', 'station_name', 'subline']
     search_fields = ['station_id', 'station_name']
     list_filter = ['subline']
+
+
+class RoleModulePermissionInline(admin.TabularInline):
+    model = RoleModulePermission
+    extra = 0
+
+
+@admin.register(Role)
+class RoleAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'is_active', 'created_at']
+    search_fields = ['name']
+    list_filter = ['is_active']
+    filter_horizontal = ['permissions']
+
+
+@admin.register(PermissionModule)
+class PermissionModuleAdmin(admin.ModelAdmin):
+    list_display = ['id', 'slug', 'name', 'sort_order', 'is_active']
+    search_fields = ['slug', 'name']
+    list_filter = ['is_active']
 
 
 
@@ -401,7 +421,6 @@ class HierarchyStructureAdmin(admin.ModelAdmin):
 admin.site.register(OJTLevel2Quantity)
 admin.site.register(UserRegistration)
 admin.site.register(StationManager)
-admin.site.register(Role)
 admin.site.register(User)
 admin.site.register(StationSetting)
 admin.site.register(ManagementReviewCTQandPDI)

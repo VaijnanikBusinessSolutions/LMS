@@ -8,9 +8,10 @@ import re
 import pandas as pd
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin, Permission
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
+from .rbac import RBAC_ACTIONS, RBAC_MODULES, build_permission_codename, normalize_action, normalize_module_slug
 from django.core.validators import RegexValidator
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
@@ -42,6 +43,7 @@ class Role(models.Model):
     TEAM_LEADER = 'team-leader'
     EMPLOYEE = 'employee'
     name = models.CharField(max_length=50, unique=True)
+    permissions = models.ManyToManyField(Permission, blank=True, related_name='rbac_roles')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -53,6 +55,10 @@ class Role(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def normalized_name(self):
+        return (self.name or "").strip().lower()
 
     @classmethod
     def get_default_roles(cls):
@@ -71,6 +77,96 @@ class Role(models.Model):
             role, created = cls.objects.get_or_create(name=role_name)
             roles_list.append(role)
         return roles_list
+
+    def has_permission(self, module_slug, action='view'):
+        if not self.is_active or not module_slug:
+            return False
+        codename = build_permission_codename(module_slug, action)
+        return self.permissions.filter(codename=codename).exists()
+
+
+class PermissionModule(models.Model):
+    slug = models.SlugField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = 'Permission Module'
+        verbose_name_plural = 'Permission Modules'
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def normalize_action(cls, action):
+        return normalize_action(action)
+
+    @classmethod
+    def sync_default_modules(cls):
+        modules = []
+        for index, (slug, config) in enumerate(RBAC_MODULES.items(), start=1):
+            module, created = cls.objects.get_or_create(
+                slug=slug.replace('_', '-'),
+                defaults={
+                    'name': config['name'],
+                    'description': config['description'],
+                    'sort_order': index,
+                },
+            )
+            if not created:
+                updates = []
+                if module.name != config['name']:
+                    module.name = config['name']
+                    updates.append('name')
+                if module.description != config['description']:
+                    module.description = config['description']
+                    updates.append('description')
+                if module.sort_order != index:
+                    module.sort_order = index
+                    updates.append('sort_order')
+                if updates:
+                    module.save(update_fields=updates)
+            modules.append(module)
+        return modules
+
+
+class RoleModulePermission(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='module_permissions')
+    module = models.ForeignKey(PermissionModule, on_delete=models.CASCADE, related_name='role_permissions')
+    can_view = models.BooleanField(default=False)
+    can_create = models.BooleanField(default=False)
+    can_update = models.BooleanField(default=False)
+    can_delete = models.BooleanField(default=False)
+    can_approve = models.BooleanField(default=False)
+    can_export = models.BooleanField(default=False)
+    can_manage = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['module__sort_order', 'module__name']
+        unique_together = ('role', 'module')
+        verbose_name = 'Role Module Permission'
+        verbose_name_plural = 'Role Module Permissions'
+
+    def __str__(self):
+        return f'{self.role.name} -> {self.module.slug}'
+
+    def allowed_actions(self):
+        return {
+            'view': self.can_view,
+            'create': self.can_create,
+            'update': self.can_update,
+            'delete': self.can_delete,
+            'approve': self.can_approve,
+            'export': self.can_export,
+            'manage': self.can_manage,
+        }
 
 
 # ------------------ Custom User Manager ------------------
@@ -196,6 +292,33 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_employee(self):
         return self.role.name == Role.EMPLOYEE
+
+    def has_module_permission(self, module_slug, action='view'):
+        if not self.is_authenticated or not self.is_active:
+            return False
+        if self.is_superuser:
+            return True
+        if not self.role_id or not self.role or not self.role.is_active:
+            return False
+        return self.role.has_permission(module_slug, action)
+
+    def get_accessible_modules(self):
+        if not self.role_id or not self.role:
+            return {}
+        modules = {
+            module_slug: {
+                'name': config['name'],
+                **{action: False for action in RBAC_ACTIONS.keys()},
+            }
+            for module_slug, config in RBAC_MODULES.items()
+        }
+        for permission in self.role.permissions.all():
+            for module_slug in RBAC_MODULES.keys():
+                normalized_slug = normalize_module_slug(module_slug)
+                for action in RBAC_ACTIONS.keys():
+                    if permission.codename == build_permission_codename(normalized_slug, action):
+                        modules[normalized_slug][action] = True
+        return modules
 
 from django.db import models
 # ------------------ HQ ------------------

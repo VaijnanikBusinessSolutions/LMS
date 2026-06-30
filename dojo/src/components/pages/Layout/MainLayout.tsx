@@ -104,6 +104,7 @@ const localhostout = () => {
                     isOpen={isPanelOpen}
                     onClose={() => setIsPanelOpen(false)}
                     userRole={user?.role || 'employee'}
+                    user={user}
                 />
 
                 {/* MAIN CONTENT AREA */}

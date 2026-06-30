@@ -1,5 +1,15 @@
 // Authentication
-export type UserRole = 'admin' | 'team-leader' | 'employee';
+export type UserRole = string;
+export interface PermissionAccess {
+  name?: string;
+  view?: boolean;
+  create?: boolean;
+  update?: boolean;
+  delete?: boolean;
+  approve?: boolean;
+  export?: boolean;
+  manage?: boolean;
+}
 export interface LoginRequest {
   email: string;
   password: string;
@@ -7,6 +17,7 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   user: {
+    id: number;
     email: string;
     first_name: string;
     last_name: string;
@@ -16,6 +27,7 @@ export interface LoginResponse {
     factory: string;
     department: string;
     status: boolean;
+    permissions?: Record<string, PermissionAccess>;
   };
   access_token: string;
   refresh_token: string;
@@ -57,6 +69,13 @@ export interface CheckItem {
   question_id?: number;
   description: string;
   status: 'pass' | 'fail' | '';
+}
+
+export interface SheetAnswer {
+  question?: number;
+  question_id?: number;
+  answer?: string | null;
+  status: 'pass' | 'fail' | 'eligible' | 'not_eligible' | '';
 }
 
 export interface CheckData {

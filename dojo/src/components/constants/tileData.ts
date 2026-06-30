@@ -166,9 +166,8 @@ export const tabs: TabDefinition[] = [
 // ==================== QUICK LINKS ====================
 export const dashboardLinks: QuickLink[] = [
   { name: 'Admin Dashboard', path: '/lms/admin', icon: Presentation, description: 'LMS admin', color: 'from-blue-500 to-blue-700' },
-  { name: 'Dashboard', path: '/lms/dashboard', icon: UsersRound, description: 'Progress', color: 'from-blue-600 to-blue-800' },
-  { name: 'Management Review Dashboard', path: '/management', icon: LineChart, description: 'KPIs', color: 'from-purple-500 to-purple-700' },
-  // { name: 'Advanced Manpower Planning', path: '/advance', icon: BarChartBig, description: 'Planning', color: 'from-purple-600 to-purple-800' },
+  { name: 'Team Leader Dashboard', path: '/team-lead/dashboard', icon: LineChart, description: 'Supervisor overview', color: 'from-purple-500 to-purple-700' },
+  { name: 'Employee Dashboard', path: '/lms/dashboard', icon: UsersRound, description: 'Learning progress', color: 'from-blue-600 to-blue-800' },
 ];
 
 
@@ -203,9 +202,8 @@ export const tiles: TileData[] = [
     title: 'Dashboards',
     links: [
       { name: 'Admin Dashboard', path: '/lms/admin', icon: Presentation },
-      { name: 'Dashboard', path: '/lms/dashboard', icon: UsersRound },
-      { name: 'Management Review Dashboard', path: '/management', icon: LineChart },
-      // { name: 'Advanced Manpower Planning', path: '/advance', icon: PieChart },
+      { name: 'Team Leader Dashboard', path: '/team-lead/dashboard', icon: LineChart },
+      { name: 'Employee Dashboard', path: '/lms/dashboard', icon: UsersRound },
     ],
     icon: Gauge, // UNIQUE parent icon
     statusText: 'Live',

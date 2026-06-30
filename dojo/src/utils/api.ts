@@ -8,6 +8,7 @@ export function normalizeListResponse<T>(payload: unknown): T[] {
       results?: unknown;
       data?: unknown;
       items?: unknown;
+      roles?: unknown;
     };
 
     if (Array.isArray(candidate.results)) {
@@ -20,6 +21,10 @@ export function normalizeListResponse<T>(payload: unknown): T[] {
 
     if (Array.isArray(candidate.items)) {
       return candidate.items as T[];
+    }
+
+    if (Array.isArray(candidate.roles)) {
+      return candidate.roles as T[];
     }
   }
 

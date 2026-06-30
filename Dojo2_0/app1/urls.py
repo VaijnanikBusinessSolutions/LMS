@@ -129,6 +129,7 @@ router.register(r'department-stations', DepartmentStationViewSet, basename='depa
 
 router.register(r"users", UserViewSet, basename="user")
 router.register(r'roles', RoleViewSet, basename='role')
+router.register(r'permission-modules', PermissionModuleViewSet, basename='permission-module')
 
 router.register(r'handovers', HandoverSheetViewSet, basename='handover')
 
