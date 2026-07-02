@@ -85,6 +85,7 @@ class RoleSerializer(serializers.ModelSerializer):
             for permission in obj.permissions.filter(content_type__app_label='app1').select_related('content_type')
         }
         serialized_permissions = []
+        is_admin_role = obj.normalized_name == normalize_module_slug(Role.ADMIN)
 
         for module_slug, config in RBAC_MODULES.items():
             item = {
@@ -92,7 +93,7 @@ class RoleSerializer(serializers.ModelSerializer):
                 'module_name': config['name'],
             }
             for action in RBAC_ACTIONS.keys():
-                item[action] = build_permission_codename(module_slug, action) in role_permissions
+                item[action] = is_admin_role or build_permission_codename(module_slug, action) in role_permissions
             serialized_permissions.append(item)
 
         return serialized_permissions
@@ -117,10 +118,36 @@ class RoleSerializer(serializers.ModelSerializer):
 
 class PermissionModuleSerializer(serializers.ModelSerializer):
     available_permissions = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
+    features = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PermissionModule
-        fields = ['id', 'slug', 'name', 'description', 'sort_order', 'is_active', 'available_permissions']
+        fields = [
+            'id',
+            'slug',
+            'name',
+            'display_name',
+            'description',
+            'category',
+            'features',
+            'sort_order',
+            'is_active',
+            'available_permissions',
+        ]
+
+    def get_category(self, obj):
+        config = RBAC_MODULES.get(normalize_module_slug(obj.slug), {})
+        return config.get('category', 'General')
+
+    def get_features(self, obj):
+        config = RBAC_MODULES.get(normalize_module_slug(obj.slug), {})
+        return config.get('features', [])
+
+    def get_display_name(self, obj):
+        config = RBAC_MODULES.get(normalize_module_slug(obj.slug), {})
+        return config.get('display_name', obj.name)
 
     def get_available_permissions(self, obj):
         module_slug = normalize_module_slug(obj.slug)
@@ -376,6 +403,22 @@ Admin Team
         transaction.on_commit(trigger_welcome_email)
 
         return user
+
+    def update(self, instance, validated_data):
+        role_name = validated_data.pop('role', None)
+        raw_password = validated_data.pop('password', None)
+
+        if role_name:
+            instance.role = Role.objects.get(name=role_name, is_active=True)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if raw_password:
+            instance.set_password(raw_password)
+
+        instance.save()
+        return instance
     
 from rest_framework import serializers
 from .models import Level, Days, SubTopic, SubTopicContent, TrainingContent, Evaluation

@@ -80,4 +80,22 @@ export const authAPI = {
 
     return await response.json();
   },
+
+  getCurrentUser: async (accessToken: string): Promise<LoginResponse["user"]> => {
+    const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.CURRENT_USER}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      mode: "cors",
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || errorData.detail || "Failed to refresh current user");
+    }
+
+    return await response.json();
+  },
 };

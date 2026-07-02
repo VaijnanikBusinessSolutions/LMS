@@ -157,8 +157,8 @@ class SystemNotificationConsumer(AsyncWebsocketConsumer):
         """Handle WebSocket connection"""
         self.user = self.scope["user"]
         
-        # Only allow admin/management users
-        if self.user.is_anonymous or self.user.role not in ['admin', 'management']:
+        # Limit system notifications to users with admin-level dashboard access.
+        if self.user.is_anonymous or not self.user.has_module_permission('dashboard', 'manage'):
             await self.close()
             return
         

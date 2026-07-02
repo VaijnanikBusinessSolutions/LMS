@@ -186,7 +186,7 @@ urlpatterns = [
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # path('api/', include(router.urls)),
     path('temp-user-info/', UserRegistrationViewSet.as_view({'get': 'list', 'post': 'create'}), name='temp-user-info'),
-    path('users/<str:temp_id>/', UserRegistrationViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'put': 'update', 'delete': 'destroy'}), name='user-update'),
+    path('temp-user-info/<str:temp_id>/', UserRegistrationViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'put': 'update', 'delete': 'destroy'}), name='temp-user-detail'),
     # Body check endpoints
     path('human-body-checks/', BodyCheckSubmissionView.as_view(), name='human-body-checks'),
     path('user-body-checks/', UserBodyCheckListView.as_view(), name='user-body-checks'),

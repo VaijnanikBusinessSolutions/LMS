@@ -3,19 +3,19 @@
 // normal design 
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ChevronRight, Star, ArrowUpRight,
-  BookOpen, List, Users, CheckSquare,
-  ClipboardCheck, UserPlus, Calendar,
-  FileText, Activity, Layers, ShieldCheck,
+  ChevronRight, Star,
+  BookOpen, List, Users,
+  ClipboardCheck, Calendar,
+  FileText, Activity, ShieldCheck,
   Settings, BarChart3, GraduationCap,
   Search, Bell, Briefcase, Layout,
-  MousePointer2, Database, Wrench, Settings2,
+  MousePointer2, Wrench,
   IdCard,Bot
 } from 'lucide-react';
-import { linkPermissions } from '../../constants/permissions';
+import { getAllowedLinksForTile } from '../../constants/permissions';
 
 const getLinkIcon = (name: string) => {
   const n = name.toLowerCase();
@@ -49,11 +49,11 @@ interface TileProps {
   disabled?: boolean;
   userRole: string;
   tileId: string;
+  index?: number;
 }
 
 const TileNew: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled = false, userRole, tileId }) => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [pinned, setPinned] = useState<string[]>([]);
 
   useEffect(() => {
@@ -63,11 +63,9 @@ const TileNew: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled 
 
   const filteredLinks = useMemo(() => {
     if (userRole && tileId) {
-      const rolePerms = (linkPermissions as any)[userRole];
-      const perms = rolePerms ? rolePerms[tileId] : null;
-      if (perms) {
-        return (links || []).filter((l: any) => perms.includes(l.name));
-      }
+      const auth = JSON.parse(localStorage.getItem('auth') || '{}');
+      const effectiveUser = auth?.user || { role: userRole };
+      return getAllowedLinksForTile(effectiveUser, tileId, links || []);
     }
     return links || [];
   }, [links, userRole, tileId]);

@@ -574,7 +574,7 @@ import {
   formLinks,
   type TabId
 } from '../../constants/tileData';
-import { canAccessTile } from '../../constants/permissions';
+import { canAccessTile, getAllowedLinksForTile } from '../../constants/permissions';
 import TilesGrid from '../../organisms/TilesGrid/TilesGrid';
 import TilesGridNew from '../../organisms/TilesGrid copy/TilesGrid';
 import { useDesign } from "../../../context/DesignContext";
@@ -613,6 +613,32 @@ export const HomePage = () => {
   const userRole = user?.role || 'employee';
   const JOURNEY_ORDER = ['lms-dashboard', 'process-dojo', 'courses', 'department-training', 'groups'];
 
+  const getQuickLinkTileId = (linkName: string, currentTab: TabId) => {
+    if (currentTab === 'dashboards') {
+      return 'lms-dashboard';
+    }
+    if (currentTab === 'tables') {
+      if (linkName === 'Courses') return 'courses';
+      if (linkName === 'User Table' || linkName === 'Employee History Card') {
+        return 'master-employee';
+      }
+      if (linkName === 'Lesson Materials') return 'level-curriculum';
+      if (linkName === 'AR/VR Experience' || linkName === 'Animations') {
+        return 'ar-vr';
+      }
+      return 'reports';
+    }
+    if (currentTab === 'forms') {
+      if (linkName === 'Group Creation') return 'groups';
+      if (linkName === 'User Creation') return 'User Managements';
+      if (linkName === 'Registration') return 'process-dojo';
+      if (linkName === 'Planning') return 'planning';
+      if (linkName === 'Create Course') return 'courses';
+      return 'User Managements';
+    }
+    return '';
+  };
+
   const filteredTiles = useMemo(() => {
     const allTiles = getTilesByTab(activeTab);
     return allTiles
@@ -624,6 +650,23 @@ export const HomePage = () => {
         const indexB = JOURNEY_ORDER.indexOf(b.id);
         return (indexA > -1 ? indexA : 99) - (indexB > -1 ? indexB : 99);
       });
+  }, [activeTab, user]);
+
+  const visibleQuickLinks = useMemo(() => {
+    const sourceLinks =
+      activeTab === 'dashboards'
+        ? dashboardLinks
+        : activeTab === 'tables'
+          ? tableLinks
+          : formLinks;
+
+    return sourceLinks.filter((link) => {
+      const tileId = getQuickLinkTileId(link.name, activeTab);
+      if (!tileId) {
+        return false;
+      }
+      return getAllowedLinksForTile(user, tileId, [link]).length > 0;
+    });
   }, [activeTab, user]);
 
   return (
@@ -771,8 +814,7 @@ export const HomePage = () => {
               exit={{ opacity: 0 }}
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 w-full"
             >
-              {(activeTab === 'dashboards' ? dashboardLinks :
-                activeTab === 'tables' ? tableLinks : formLinks).map((link, i) => (
+              {visibleQuickLinks.map((link, i) => (
                   <motion.div
                     key={i}
                     onClick={() => navigate(link.path)}

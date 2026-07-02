@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 // import MainLayout from './components/pages/Layout/MainLayout';
 import { HomePage } from "./components/pages/Homepage/Home";
 import Planning from "./components/pages/Planning/Planning";
@@ -138,8 +140,19 @@ import HomePageContainer from "./context/HomePageContainer";
 import AIFeatures from "./lms_components/AiQuiz/AiFeatures";
 import FloatingAI from "./lms_components/AiQuiz/FloatingAI";
 import AIAssistant from "./lms_components/AiQuiz/AiAssistant";
+import { refreshCurrentUser } from "./components/hooks/useAuth";
+import type { RootState } from "./store/store";
 
 function App() {
+  const dispatch = useDispatch();
+  const { isAuthenticated, accessToken } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if (isAuthenticated && accessToken) {
+      dispatch(refreshCurrentUser() as any);
+    }
+  }, [dispatch, isAuthenticated, accessToken]);
+
   return (
     <DesignProvider>
       <BrowserRouter>
@@ -178,10 +191,357 @@ function App() {
                 <Route path="/lms/dashboard" element={<DashboardView />} />
               </Route>
 
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["user_registration", "users"]}
+                  />
+                }
+              >
+                <Route path="/Roles" element={<Roles />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["user_creation", "users"]}
+                  />
+                }
+              >
+                <Route path="/lms/users/new" element={<AddUserForm />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["user_table", "users"]}
+                  />
+                }
+              >
+                <Route path="/lms/users/table" element={<UserTable />} />
+                <Route
+                  path="/PassedUsersTable"
+                  element={<PassedUsersTable />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["create_course", "courses"]}
+                  />
+                }
+              >
+                <Route path="/lms/course-list" element={<CourseList />} />
+                <Route
+                  path="/CourseContentManager"
+                  element={<CourseContentManager />}
+                />
+                <Route
+                  path="/CourseTestsManager"
+                  element={<CourseTestsManager />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["enrollments", "courses", "groups"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/enrollments"
+                  element={<AdminEnrollmentPage />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["group_creation", "groups"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/groups/create"
+                  element={<CreateGroupPage />}
+                />
+                <Route path="/lms/groups/edit" element={<EditGroupPage />} />
+                <Route
+                  path="/lms/groups/create/:groupId"
+                  element={<CreateGroupPage />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["groups_directory", "groups"]}
+                  />
+                }
+              >
+                <Route path="/lms/groups" element={<StudentGroupsListPage />} />
+                <Route
+                  path="/lms/groups/view/:groupId"
+                  element={<EmployeeGroupView />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["course_reports", "reports"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/reports/courses/"
+                  element={<CourseReport />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["employee_reports", "reports"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/reports/employees"
+                  element={<EmployeeList />}
+                />
+                <Route
+                  path="/EmployeeReport/:employeeId"
+                  element={<EmployeeReport />}
+                />
+                <Route
+                  path="/EmployeeHistorySearch"
+                  element={<EmployeeHistorySearch />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["certificate", "reports"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/courses/:courseId/certificate"
+                  element={<CertificatePage />}
+                />
+                <Route
+                  path="/lms/certificateHome"
+                  element={<CertificateHome />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["notifications_page", "notifications"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/notifications"
+                  element={<NotificationPage selectedRole={"Administrator"} />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["lesson_materials", "courses"]}
+                  />
+                }
+              >
+                <Route path="/documents" element={<LessonAttachments />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["ai_chat_bot", "ai_tools"]}
+                  />
+                }
+              >
+                <Route path="/lms/ai-features" element={<AIFeatures />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["ai_assistant", "ai_tools"]}
+                  />
+                }
+              >
+                <Route path="/ai-assistant" element={<AIAssistant />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["schedule", "planning"]}
+                  />
+                }
+              >
+                <Route path="/lms/calendar" element={<TrainingCalendar />} />
+                <Route
+                  path="/lms/employee-calendar"
+                  element={<TrainingCalendar />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["tni", "planning"]}
+                  />
+                }
+              >
+                <Route path="/refreshment" element={<RefreshmentTraining />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["multiskill_schedule", "planning"]}
+                  />
+                }
+              >
+                <Route path="/Scheduling" element={<Scheduling />} />
+                <Route path="/scheduling" element={<Scheduling />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["level_wise_sheet", "users", "assessments"]}
+                  />
+                }
+              >
+                <Route path="/lms/usertables" element={<AssementTable />} />
+                <Route path="/lms/AnalysisSheet" element={<AnalysisSheet />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["level_assessment", "assessments"]}
+                  />
+                }
+              >
+                <Route
+                  path="/CompetencySystem"
+                  element={<CompetencySystem />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["competency_dashboard", "assessments"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/competency-matrix"
+                  element={<CompetencyDashboard />}
+                />
+                <Route
+                  path="/CompetencyDashboard"
+                  element={<CompetencyMatrix />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["method_settings", "method"]}
+                  />
+                }
+              >
+                <Route path="/methodsettings" element={<MethodPage />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["hierarchy", "method"]}
+                  />
+                }
+              >
+                <Route
+                  path="/lms/organization/setup"
+                  element={<OrganizationSetup />}
+                />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["ar_vr_experience", "ai_tools"]}
+                  />
+                }
+              >
+                <Route path="/ArVrComponent" element={<ArVrComponent />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["animations", "ai_tools"]}
+                  />
+                }
+              >
+                <Route path="/materials" element={<VideoMaterials />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["skill_matrix"]}
+                  />
+                }
+              >
+                <Route path="/skillmatrix" element={<SkillMatrixPage />} />
+              </Route>
+
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={["course_catalog", "courses"]}
+                  />
+                }
+              >
+                <Route path="/lms/courses" element={<CoursesView />} />
+                <Route path="/courses/:courseId" element={<CourseDetail />} />
+                <Route path="/lms/courses/:courseId" element={<CoursePage />} />
+                <Route
+                  path="/lms/courses/:courseId/lesson/:lessonId"
+                  element={<CourseLessonPage />}
+                />
+                <Route
+                  path="/lms/courses/:courseId/test/:testId"
+                  element={<CourseMcqExam />}
+                />
+                <Route
+                  path="/lms/courses/:courseId/results"
+                  element={<CourseResultSummary />}
+                />
+                <Route
+                  path="/lms/growth/compare/employee/:courseId"
+                  element={<EmployeeGrowthReportsPage />}
+                />
+              </Route>
+
               {/* A. ADMIN ONLY ROUTES */}
               {/* ONLY Admins can see these. Employees cannot access these. */}
               <Route element={<RoleBasedRoute allowedRoles={["admin"]} />}>
-                <Route path="/lms/course-list" element={<CourseList />} />
                 <Route
                   path="/lms/growth/compare/:courseId"
                   element={<GrowthReportPage />}
@@ -193,7 +553,6 @@ function App() {
 
                 {/* Settings & Masters */}
                 <Route path="/MasterTable" element={<MasterTable />} />
-                <Route path="/Roles" element={<Roles />} />
                 <Route path="/methodsettings" element={<MethodPage />} />
                 <Route path="/Level1Settings" element={<Level1Settings />} />
                 <Route
@@ -222,14 +581,6 @@ function App() {
                   element={<OJTRequirements />}
                 />
 
-                {/* User Management */}
-                <Route path="/lms/users/new" element={<AddUserForm />} />
-                <Route path="/lms/users/table" element={<UserTable />} />
-                <Route
-                  path="/PassedUsersTable"
-                  element={<PassedUsersTable />}
-                />
-
                 {/* Exam Creation */}
                 <Route
                   path="/question-paper-setting"
@@ -239,14 +590,6 @@ function App() {
                 <Route
                   path="/bulk-upload-questions"
                   element={<BulkQuestionsrevision />}
-                />
-                <Route
-                  path="/CourseContentManager"
-                  element={<CourseContentManager />}
-                />
-                <Route
-                  path="/CourseTestsManager"
-                  element={<CourseTestsManager />}
                 />
               </Route>
 
@@ -260,10 +603,6 @@ function App() {
                 <Route path="/Management" element={<Management />} />
                 <Route path="/Hanchou" element={<Hanchou />} />
                 <Route path="/Shokuchou" element={<Shokuchou />} />
-                <Route
-                  path="/lms/enrollments"
-                  element={<AdminEnrollmentPage />}
-                />
 
                 {/* Approvals & Reports */}
                 <Route path="/approvallist" element={<Approvallist />} />
@@ -294,28 +633,11 @@ function App() {
                   path="/machineallocationslist"
                   element={<MachineAllocationList />}
                 />
-                <Route
-                  path="/lms/groups/create"
-                  element={<CreateGroupPage />}
-                />
-                <Route path="/lms/groups/edit" element={<EditGroupPage />} />
                 <Route path="/SchedulePlanner" element={<SchedulePlanner />} />
 
                 {/* Analytics */}
                 <Route path="/analytics" element={<Anlitics />} />
                 <Route path="/report" element={<Report />} />
-                <Route
-                  path="/lms/reports/employees"
-                  element={<EmployeeList />}
-                />
-                <Route
-                  path="/lms/reports/courses/"
-                  element={<CourseReport />}
-                />
-                <Route
-                  path="/EmployeeReport/:employeeId"
-                  element={<EmployeeReport />}
-                />
               </Route>
 
               {/* C. GENERAL/EMPLOYEE ROUTES (Everyone) */}
@@ -331,52 +653,9 @@ function App() {
                 {/* <Route path="/home" element={<HomePage />} /> */}
                 <Route path="/home" element={<HomePageContainer />} />
                 <Route path="/employee/dashboard" element={<HomePage />} />
-                <Route
-                  path="/lms/growth/compare/employee/:courseId"
-                  element={<EmployeeGrowthReportsPage />}
-                />
-                <Route
-                  path="/lms/courses/:courseId/certificate"
-                  element={<CertificatePage />}
-                />
-                <Route
-                  path="/lms/certificateHome"
-                  element={<CertificateHome />}
-                />
-                <Route path="/lms/calendar" element={<TrainingCalendar />} />
-                <Route
-                  path="/lms/employee-calendar"
-                  element={<TrainingCalendar />}
-                />
-                <Route
-                  path="/lms/groups/create/:groupId"
-                  element={<CreateGroupPage />}
-                />
-                <Route
-                  path="/lms/groups/view/:groupId"
-                  element={<EmployeeGroupView />}
-                />
-                <Route
-                  path="/lms/courses/:courseId/results"
-                  element={<CourseResultSummary />}
-                />
-                <Route path="/lms/ai-features" element={<AIFeatures />} />
-                <Route path="/ai-assistant" element={<AIAssistant />} />
-
                 {/* Courses & Learning */}
                 {/* <Route path="/lms/courses" element={<CoursesView />} /> */}
                 {/* <Route path="/lms/course-list" element={<CourseList />} /> */}
-                <Route path="/lms/courses" element={<CoursesView />} />
-                <Route path="/courses/:courseId" element={<CourseDetail />} />
-                <Route path="/lms/courses/:courseId" element={<CoursePage />} />
-                <Route
-                  path="/lms/courses/:courseId/lesson/:lessonId"
-                  element={<CourseLessonPage />}
-                />
-                <Route
-                  path="/lms/courses/:courseId/test/:testId"
-                  element={<CourseMcqExam />}
-                />
                 <Route path="/dojoTraining/" element={<DojoDetail />} />
                 <Route path="/ContentPage" element={<SimpleContentPage />} />
                 <Route path="/ProcessDojo" element={<ProcessDojo />} />
@@ -406,29 +685,18 @@ function App() {
                 />
 
                 {/* Personal Info & Self Service */}
-                <Route path="/skillmatrix" element={<SkillMatrixPage />} />
-                <Route path="/refreshment" element={<RefreshmentTraining />} />
                 <Route path="/retraining" element={<Retraining />} />
                 <Route
                   path="/TempEmployeeSearch"
                   element={<TempEmployeeSearch />}
-                />
-                <Route
-                  path="/EmployeeHistorySearch"
-                  element={<EmployeeHistorySearch />}
                 />
                 <Route path="/notification" element={<AppNotification />} />
                 <Route
                   path="/multinotification"
                   element={<MultiNotification />}
                 />
-                <Route
-                  path="/lms/notifications"
-                  element={<NotificationPage selectedRole={"Administrator"} />}
-                />
 
                 {/* Misc */}
-                <Route path="/ArVrComponent" element={<ArVrComponent />} />
                 <Route path="/machines" element={<MachinesPage />} />
                 <Route path="/advanced" element={<Advanced />} />
                 <Route path="/advance" element={<Advance />} />
@@ -468,21 +736,6 @@ function App() {
                   element={<SkillEvaluationList />}
                 />
                 <Route path="/DownloadFiles" element={<DownloadFiles />} />
-                <Route path="/lms/groups" element={<StudentGroupsListPage />} />
-                <Route path="/lms/usertables" element={<AssementTable />} />
-                <Route path="/lms/AnalysisSheet" element={<AnalysisSheet />} />
-                <Route
-                  path="/CompetencySystem"
-                  element={<CompetencySystem />}
-                />
-                <Route
-                  path="/lms/competency-matrix"
-                  element={<CompetencyDashboard />}
-                />
-                <Route
-                  path="/CompetencyDashboard"
-                  element={<CompetencyMatrix />}
-                />
                 <Route
                   path="/financial-year"
                   element={<FinancialCompetencyPlanner />}
@@ -499,12 +752,6 @@ function App() {
                   path="/lms/competency/rules"
                   element={<RuleBasedCompetencySetup />}
                 />
-                <Route
-                  path="/lms/organization/setup"
-                  element={<OrganizationSetup />}
-                />
-                <Route path="/materials" element={<VideoMaterials />} />
-                <Route path="/documents" element={<LessonAttachments />} />
 
                 {/* <Route path="/lms/enrollments" element={<AdminEnrollmentPage />} /> */}
               </Route>

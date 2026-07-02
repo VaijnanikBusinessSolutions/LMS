@@ -25,6 +25,24 @@ interface AuthState {
   loading: boolean;
 }
 
+const persistAuthState = (state: AuthState) => {
+  localStorage.setItem("auth", JSON.stringify({
+    user: state.user,
+    accessToken: state.accessToken,
+    refreshToken: state.refreshToken,
+  }));
+
+  if (state.user) {
+    localStorage.setItem("user", JSON.stringify(state.user));
+  }
+  if (state.accessToken) {
+    localStorage.setItem("access_token", state.accessToken);
+  }
+  if (state.refreshToken) {
+    localStorage.setItem("refresh_token", state.refreshToken);
+  }
+};
+
 const initialState: AuthState = {
   user: null,
   accessToken: null,
@@ -61,6 +79,29 @@ export const logout = createAsyncThunk<void, void, { state: { auth: AuthState } 
   }
 );
 
+export const refreshCurrentUser = createAsyncThunk<
+  User,
+  void,
+  { state: { auth: AuthState } }
+>(
+  "auth/refreshCurrentUser",
+  async (_, { getState, rejectWithValue }) => {
+    const { auth } = getState();
+    const accessToken = auth.accessToken || localStorage.getItem("access_token");
+
+    if (!accessToken) {
+      return rejectWithValue("Missing access token");
+    }
+
+    try {
+      const user = await authAPI.getCurrentUser(accessToken);
+      return user as User;
+    } catch (error: any) {
+      return rejectWithValue(error?.message || "Failed to refresh current user");
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -85,12 +126,7 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
       state.loading = false;
 
-      // persist in localStorage
-      localStorage.setItem("auth", JSON.stringify({
-        user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-      }));
+      persistAuthState(state);
     });
     builder.addCase(login.rejected, (state) => {
       state.loading = false;
@@ -110,6 +146,22 @@ const authSlice = createSlice({
 
       //clear localStorage
       localStorage.removeItem("auth");
+      localStorage.removeItem("user");
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+    });
+
+    builder.addCase(refreshCurrentUser.pending, (state) => {
+      state.loading = true;
+    });
+    builder.addCase(refreshCurrentUser.fulfilled, (state, action: PayloadAction<User>) => {
+      state.user = action.payload;
+      state.isAuthenticated = true;
+      state.loading = false;
+      persistAuthState(state);
+    });
+    builder.addCase(refreshCurrentUser.rejected, (state) => {
+      state.loading = false;
     });
   },
 });

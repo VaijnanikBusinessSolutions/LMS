@@ -40,7 +40,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import ValidationError
 
 from .serializers import LoginSerializer
-from .models import PermissionModule, User
+from .models import PermissionModule, User, sync_rbac_permissions
 from .permissions import RBACPermission
 from .rbac import RBAC_MODULES
 
@@ -101,6 +101,7 @@ class LoginAPIView(APIView):
             'employeeid': getattr(user, 'employeeid', None),
             # Prefer returning primitive values (ids or names) for related objects:
             'role': getattr(getattr(user, 'role', None), 'name', None),
+            'userType': user.get_lms_user_type(),
             'hq': getattr(getattr(user, 'hq', None), 'name', getattr(user, 'hq', None)),
             'factory': getattr(getattr(user, 'factory', None), 'name', getattr(user, 'factory', None)),
             'department': getattr(getattr(user, 'department', None), 'name', getattr(user, 'department', None)),
@@ -300,8 +301,22 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
     def me(self, request):
         """Return current user info"""
-        serializer = UserRBACSerializer(request.user)
-        return Response(serializer.data)
+        user = request.user
+        return Response({
+            'id': user.id,
+            'email': getattr(user, 'email', None),
+            'first_name': getattr(user, 'first_name', None),
+            'last_name': getattr(user, 'last_name', None),
+            'employeeid': getattr(user, 'employeeid', None),
+            'role': getattr(getattr(user, 'role', None), 'name', None),
+            'userType': user.get_lms_user_type(),
+            'hq': getattr(getattr(user, 'hq', None), 'name', getattr(user, 'hq', None)),
+            'factory': getattr(getattr(user, 'factory', None), 'name', getattr(user, 'factory', None)),
+            'department': getattr(getattr(user, 'department', None), 'name', getattr(user, 'department', None)),
+            'status': getattr(user, 'status', None),
+            'designation': getattr(getattr(user, 'designation', None), 'name', getattr(user, 'designation', None)),
+            'permissions': user.get_accessible_modules(),
+        })
 
 class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.all().prefetch_related('permissions')
@@ -310,16 +325,50 @@ class RoleViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, RBACPermission]
     rbac_module = 'roles'
 
+    def get_queryset(self):
+        sync_rbac_permissions()
+        return super().get_queryset()
+
     def perform_create(self, serializer):
         serializer.save()
 
+    def destroy(self, request, *args, **kwargs):
+        from django.db import transaction
+
+        role = self.get_object()
+        assigned_users = role.users.count()
+
+        with transaction.atomic():
+            if assigned_users:
+                role.users.all().delete()
+
+            self.perform_destroy(role)
+
+        if assigned_users:
+            return Response(
+                {
+                    'detail': (
+                        f'Role "{role.name}" deleted successfully. '
+                        f'{assigned_users} user{"s" if assigned_users != 1 else ""} '
+                        'assigned to this role were also deleted.'
+                    )
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class PermissionModuleViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = PermissionModule.objects.all()
+    queryset = PermissionModule.objects.filter(is_active=True)
     serializer_class = PermissionModuleSerializer
     pagination_class = None
     permission_classes = [IsAuthenticated, RBACPermission]
     rbac_module = 'roles'
+
+    def get_queryset(self):
+        sync_rbac_permissions()
+        return super().get_queryset()
 
 
 #(3) Views for the User Logout
@@ -19040,8 +19089,22 @@ class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        serializer = UserListSerializer(request.user)
-        return Response(serializer.data)
+        user = request.user
+        return Response({
+            'id': user.id,
+            'email': getattr(user, 'email', None),
+            'first_name': getattr(user, 'first_name', None),
+            'last_name': getattr(user, 'last_name', None),
+            'employeeid': getattr(user, 'employeeid', None),
+            'role': getattr(getattr(user, 'role', None), 'name', None),
+            'userType': user.get_lms_user_type(),
+            'hq': getattr(getattr(user, 'hq', None), 'name', getattr(user, 'hq', None)),
+            'factory': getattr(getattr(user, 'factory', None), 'name', getattr(user, 'factory', None)),
+            'department': getattr(getattr(user, 'department', None), 'name', getattr(user, 'department', None)),
+            'status': getattr(user, 'status', None),
+            'designation': getattr(getattr(user, 'designation', None), 'name', getattr(user, 'designation', None)),
+            'permissions': user.get_accessible_modules(),
+        })
 
 # ============== end ===========================
 

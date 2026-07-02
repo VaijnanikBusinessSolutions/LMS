@@ -738,7 +738,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ user, isLoading, onClose,
         dataToSend.append('photo', photoFile);
       }
 
-      const response = await fetch(`${API_ENDPOINTS.BASE_URL}/users/${user.temp_id}/`, {
+      const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.USER_BY_TEMP_ID(user.temp_id)}`, {
         method: 'PATCH',
         body: dataToSend,
       });

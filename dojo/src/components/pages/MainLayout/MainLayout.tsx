@@ -343,6 +343,7 @@ const MainLayout = () => {
                         isOpen={isPanelOpen}
                         onClose={() => setIsPanelOpen(false)}
                         userRole={user?.role || 'employee'}
+                        user={user}
                     />
                 ) : (
                     <ExpandableSidePanel

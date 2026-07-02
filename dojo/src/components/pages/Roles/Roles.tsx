@@ -1110,7 +1110,9 @@ import {
   Building,
   Award,
   Download,
-  FileUp
+  FileUp,
+  Pencil,
+  Trash2
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { normalizeListResponse } from "../../../utils/api";
@@ -1154,6 +1156,20 @@ interface OrgItem {
   parent: number | null;
   parent_name?: string;
 }
+
+const mapUserToEmployee = (user: any): Employee => ({
+  id: String(user.id ?? ""),
+  first_name: user.first_name || "",
+  last_name: user.last_name || "",
+  employeeid: user.employeeid || "",
+  email: user.email || "",
+  role_name: user.role_name || user.role?.name || (typeof user.role === "string" ? user.role : ""),
+  hq: user.hq?.name || user.hq || "",
+  business_unit: user.business_unit || "",
+  department: user.department?.department_name || user.department || "",
+  section: user.section || "",
+  designation: user.designation?.name || user.designation || "",
+});
 
 // Enhanced Select Component
 const EnhancedFormSelect = ({
@@ -1261,6 +1277,7 @@ const EmployeeTable: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false); 
   const [isUploading, setIsUploading] = useState(false);
 
+  const currentUser = useSelector((state: RootState) => state.auth.user);
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
   // Filters
@@ -1269,6 +1286,7 @@ const EmployeeTable: React.FC = () => {
   const [selectedBusinessUnit, setSelectedBusinessUnit] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -1288,6 +1306,42 @@ const EmployeeTable: React.FC = () => {
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  const registrationPermission =
+    currentUser?.permissions?.user_registration || currentUser?.permissions?.users;
+  const canCreateEmployee = Boolean(registrationPermission?.create || registrationPermission?.manage);
+  const canEditEmployee = Boolean(registrationPermission?.update || registrationPermission?.manage);
+  const canDeleteEmployee = Boolean(registrationPermission?.delete || registrationPermission?.manage);
+  const canExportEmployees = Boolean(
+    currentUser?.permissions?.users?.export ||
+    registrationPermission?.export ||
+    registrationPermission?.manage
+  );
+  const showActionColumn = canEditEmployee || canDeleteEmployee;
+
+  const resetForm = () => {
+    setFormData({
+      first_name: "",
+      last_name: "",
+      employeeid: "",
+      email: "",
+      role: "",
+      hq: "",
+      business_unit: "",
+      department: "",
+      section: "",
+      designation: "",
+      password: "",
+      confirmPassword: "",
+    });
+    setFormErrors({});
+    setEditingEmployee(null);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    resetForm();
+  };
+
   // --- FETCH DATA ---
   useEffect(() => {
     const fetchData = async () => {
@@ -1306,18 +1360,7 @@ const EmployeeTable: React.FC = () => {
 
         if (usersRes.ok) {
           const users = normalizeListResponse<any>(await usersRes.json());
-          const formattedUsers = users.map((u: any) => ({
-            id: String(u.id),
-            first_name: u.first_name,
-            last_name: u.last_name || "",
-            employeeid: u.employeeid,
-            email: u.email,
-            role_name: u.role_name || u.role?.name || (typeof u.role === 'string' ? u.role : ""),
-            business_unit: u.business_unit || "",
-            department: u.department?.department_name || u.department || "",
-            section: u.section || "",
-            designation: u.designation || ""
-          }));
+          const formattedUsers = users.map(mapUserToEmployee);
           setEmployees(formattedUsers);
         }
 
@@ -1500,7 +1543,60 @@ const EmployeeTable: React.FC = () => {
     }
   };
 
-  // --- SUBMIT LOGIC (OPTIMIZED FOR SPEED) ---
+  const handleEditEmployee = (employee: Employee) => {
+    if (!employee?.id) {
+      alert("This user record is missing its ID. Please refresh the page and try again.");
+      return;
+    }
+
+    setEditingEmployee(employee);
+    setFormData({
+      first_name: employee.first_name || "",
+      last_name: employee.last_name || "",
+      employeeid: employee.employeeid || "",
+      email: employee.email || "",
+      role: employee.role_name || "",
+      hq: employee.hq || "",
+      business_unit: employee.business_unit || "",
+      department: employee.department || "",
+      section: employee.section || "",
+      designation: employee.designation || "",
+      password: "",
+      confirmPassword: "",
+    });
+    setFormErrors({});
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteEmployee = async (employee: Employee) => {
+    if (!accessToken) return;
+    if (!window.confirm(`Delete ${employee.first_name} ${employee.last_name || ""}?`)) {
+      return;
+    }
+
+    const previousEmployees = employees;
+    setEmployees((prev) => prev.filter((item) => item.id !== employee.id));
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/users/${employee.id}/`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete employee.");
+      }
+
+      alert("Employee deleted successfully.");
+    } catch (error: any) {
+      setEmployees(previousEmployees);
+      alert(error?.message || "Failed to delete employee.");
+    }
+  };
+
+  // --- SUBMIT LOGIC ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -1526,18 +1622,30 @@ const EmployeeTable: React.FC = () => {
       return; 
     }
 
-    // --- OPTIMISTIC UI START ---
     setIsSubmitting(true);
 
-    // 2. Create Temp Object for Instant Display
-    const tempId = `temp-${Date.now()}`;
-    const optimisticEmployee: Employee = {
-        id: tempId,
+    const roleName = roles.find((r) => r.name === formData.role)?.name || formData.role;
+    const employeePayload = {
+      first_name: formData.first_name,
+      last_name: formData.last_name || "",
+      employeeid: formData.employeeid,
+      email: formData.email,
+      role: formData.role,
+      hq: formData.hq,
+      business_unit: formData.business_unit,
+      department: formData.department,
+      section: formData.section || "",
+      designation: formData.designation || "",
+      ...(formData.password ? { password: formData.password } : {}),
+    };
+
+    const employeeSnapshot: Employee = {
+        id: editingEmployee?.id || `temp-${Date.now()}`,
         first_name: formData.first_name,
         last_name: formData.last_name || "",
         employeeid: formData.employeeid,
         email: formData.email,
-        role_name: roles.find(r => r.name === formData.role)?.name || formData.role,
+        role_name: roleName,
         business_unit: formData.business_unit,
         department: formData.department,
         section: formData.section || "",
@@ -1545,37 +1653,54 @@ const EmployeeTable: React.FC = () => {
         hq: formData.hq
     };
 
-    // 3. Update UI Immediately (Add to bottom)
-    setEmployees((prev) => [...prev, optimisticEmployee]);
-    
-    // 4. Close Modal Immediately
-    setIsModalOpen(false); 
-    
-    // 5. Reset Form Immediately
-    setFormData({
-      first_name: "", last_name: "", employeeid: "", email: "", role: "", hq: "",
-      business_unit: "", department: "", section: "", designation: "", password: "", confirmPassword: ""
-    });
-    setFormErrors({});
-
-    // 6. SHOW ALERT IMMEDIATELY (Simulating instant success)
-    // We use setTimeout to ensure the modal visual close happens first
-    setTimeout(() => {
-        alert("Employee added successfully!");
-    }, 100);
-    
-    // --- OPTIMISTIC UI END ---
-
-    // 7. Send to Server in Background
     try {
-      const payload = {
-        ...formData,
-        hq: optimisticEmployee.hq, 
-        last_name: optimisticEmployee.last_name,
-        role: formData.role,
-        department: formData.department,
-        business_unit: formData.business_unit
-      };
+      if (editingEmployee) {
+        if (!editingEmployee.id) {
+          throw new Error("Missing employee ID for update. Please refresh the page and try again.");
+        }
+
+        const response = await fetch(`http://127.0.0.1:8000/users/${editingEmployee.id}/`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(employeePayload),
+        });
+
+        const contentType = response.headers.get("content-type") || "";
+        const data = contentType.includes("application/json")
+          ? await response.json()
+          : await response.text();
+
+        if (!response.ok) {
+          const errorMessage =
+            typeof data === "string"
+              ? "Server error while updating employee."
+              : data.message || JSON.stringify(data.errors) || JSON.stringify(data);
+          throw new Error(errorMessage || "Failed to update employee");
+        }
+
+        const updatedEmployee =
+          typeof data === "string"
+            ? { ...employeeSnapshot, id: editingEmployee.id }
+            : mapUserToEmployee(data);
+
+        setEmployees((prev) =>
+          prev.map((employee) =>
+            employee.id === editingEmployee.id ? updatedEmployee : employee
+          )
+        );
+        closeModal();
+        alert("Employee updated successfully.");
+        return;
+      }
+
+      setEmployees((prev) => [...prev, employeeSnapshot]);
+      closeModal();
+      setTimeout(() => {
+        alert("Employee added successfully!");
+      }, 100);
 
       const response = await fetch("http://127.0.0.1:8000/register/", {
         method: "POST",
@@ -1583,26 +1708,37 @@ const EmployeeTable: React.FC = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(employeePayload),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : await response.text();
 
       if (!response.ok) {
-        throw new Error(data.message || JSON.stringify(data.errors) || "Registration Failed");
+        const errorMessage =
+          typeof data === "string"
+            ? "Server error while creating employee."
+            : data.message || JSON.stringify(data.errors) || JSON.stringify(data);
+        throw new Error(errorMessage || "Registration Failed");
       }
 
-      // 8. Success: Update Temp ID to Real ID silently
       setEmployees(prev => prev.map(emp => 
-        emp.id === tempId ? { ...emp, id: String(data.id) } : emp
+        emp.id === employeeSnapshot.id
+          ? (typeof data === "string" ? { ...emp, id: String(employeeSnapshot.id) } : mapUserToEmployee(data))
+          : emp
       ));
 
     } catch (error: any) {
-      console.error("Error adding employee:", error);
-      
-      // 9. Failure: Rollback UI (Remove the user and show error)
-      setEmployees(prev => prev.filter(emp => emp.id !== tempId));
-      alert(`Failed to save employee to database: ${error.message}`);
+      console.error(editingEmployee ? "Error updating employee:" : "Error adding employee:", error);
+
+      if (editingEmployee) {
+        alert(`Failed to update employee: ${error.message}`);
+      } else {
+        setEmployees(prev => prev.filter(emp => emp.id !== employeeSnapshot.id));
+        alert(`Failed to save employee to database: ${error.message}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1692,24 +1828,33 @@ const EmployeeTable: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap gap-4">
-              <button
-                onClick={downloadTemplate}
-                className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-900 text-indigo-600 border-2 border-indigo-100 rounded-2xl font-bold shadow-sm hover:bg-indigo-50 transition-all"
-              >
-                <Download size={20} /> Template
-              </button>
+              {canExportEmployees && (
+                <button
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-900 text-indigo-600 border-2 border-indigo-100 rounded-2xl font-bold shadow-sm hover:bg-indigo-50 transition-all"
+                >
+                  <Download size={20} /> Template
+                </button>
+              )}
 
-              <label className="cursor-pointer flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all">
-                <FileUp size={20} /> {isUploading ? "Uploading..." : "Import Excel"}
-                <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} disabled={isUploading} />
-              </label>
+              {canCreateEmployee && (
+                <label className="cursor-pointer flex items-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg hover:bg-emerald-700 transition-all">
+                  <FileUp size={20} /> {isUploading ? "Uploading..." : "Import Excel"}
+                  <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleFileUpload} disabled={isUploading} />
+                </label>
+              )}
 
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg hover:bg-indigo-700 transition-all"
-              >
-                <UserPlus size={20} /> Add Employee
-              </button>
+              {canCreateEmployee && (
+                <button
+                  onClick={() => {
+                    resetForm();
+                    setIsModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg hover:bg-indigo-700 transition-all"
+                >
+                  <UserPlus size={20} /> Add Employee
+                </button>
+              )}
             </div>
           </div>
 
@@ -1866,12 +2011,15 @@ const EmployeeTable: React.FC = () => {
                     <th className="px-6 py-6 text-left text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Section</th>
                     <th className="px-6 py-6 text-left text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Designation</th>
                     <th className="px-6 py-6 text-left text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Role</th>
+                    {showActionColumn && (
+                      <th className="px-6 py-6 text-left text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-slate-900 divide-y-2 divide-slate-50 dark:divide-slate-800">
                   {filteredEmployees.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-20 text-center">
+                      <td colSpan={showActionColumn ? 8 : 7} className="py-20 text-center">
                         <div className="flex flex-col items-center">
                           <div className="p-6 bg-gradient-to-br from-slate-100 to-indigo-100 dark:from-slate-800 dark:to-indigo-900/50 rounded-full mb-4">
                             <Users className="w-12 h-12 text-slate-400" />
@@ -1884,7 +2032,7 @@ const EmployeeTable: React.FC = () => {
                   ) : (
                     filteredEmployees.map((employee, idx) => (
                       <tr
-                        key={employee.employeeid}
+                        key={employee.id}
                         className="hover:bg-gradient-to-r hover:from-indigo-50/50 hover:to-violet-50/50 dark:hover:from-indigo-900/20 dark:hover:to-violet-900/20 transition-all duration-300 group animate-in slide-in-from-left"
                         style={{ animationDelay: `${idx * 30}ms` }}
                       >
@@ -1944,6 +2092,32 @@ const EmployeeTable: React.FC = () => {
                             {employee.role_name}
                           </span>
                         </td>
+                        {showActionColumn && (
+                          <td className="px-6 py-6 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              {canEditEmployee && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditEmployee(employee)}
+                                  className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 transition-all hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300"
+                                >
+                                  <Pencil size={14} />
+                                  Edit
+                                </button>
+                              )}
+                              {canDeleteEmployee && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteEmployee(employee)}
+                                  className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 transition-all hover:bg-rose-100 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-300"
+                                >
+                                  <Trash2 size={14} />
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}
@@ -1966,12 +2140,18 @@ const EmployeeTable: React.FC = () => {
                   <UserPlus className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white">Add New Employee</h2>
-                  <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">Fill in the details to create a new user account</p>
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white">
+                    {editingEmployee ? "Edit Employee" : "Add New Employee"}
+                  </h2>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">
+                    {editingEmployee
+                      ? "Update the employee details and save your changes"
+                      : "Fill in the details to create a new user account"}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={closeModal}
                 className="p-3 bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-900/30 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-slate-500 transition-all"
               >
                 <X className="w-6 h-6" />
@@ -2186,9 +2366,9 @@ const EmployeeTable: React.FC = () => {
                     value={formData.password}
                     onChange={handleInputChange}
                     type="password"
-                    placeholder="Enter password"
+                    placeholder={editingEmployee ? "Leave blank to keep current password" : "Enter password"}
                     icon={Lock}
-                    required
+                    required={!editingEmployee}
                   />
                   <EnhancedFormInput
                     label="Confirm Password"
@@ -2196,9 +2376,9 @@ const EmployeeTable: React.FC = () => {
                     value={formData.confirmPassword}
                     onChange={handleInputChange}
                     type="password"
-                    placeholder="Confirm password"
+                    placeholder={editingEmployee ? "Confirm only if changing password" : "Confirm password"}
                     icon={Lock}
-                    required
+                    required={!editingEmployee}
                   />
                 </div>
               </div>
@@ -2207,7 +2387,7 @@ const EmployeeTable: React.FC = () => {
               <div className="flex justify-end gap-4 pt-8 border-t-2 border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   className="px-8 py-4 text-base font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition-all"
                 >
                   Cancel
@@ -2224,12 +2404,12 @@ const EmployeeTable: React.FC = () => {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Creating...
+                      {editingEmployee ? "Updating..." : "Creating..."}
                     </>
                   ) : (
                     <>
                       <UserPlus size={20} />
-                      Create Employee
+                      {editingEmployee ? "Update Employee" : "Create Employee"}
                     </>
                   )}
                 </button>

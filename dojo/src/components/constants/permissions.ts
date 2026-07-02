@@ -38,7 +38,7 @@ const fallbackRolePermissions: Record<string, string[] | 'ALL'> = {
 
 const fallbackLinkPermissions: Record<string, Record<string, string[]>> = {
   admin: {
-    'lms-dashboard': ['Admin Dashboard', 'Team Leader Dashboard', 'Employee Dashboard'],
+    'lms-dashboard': ['Admin Dashboard', 'Team Leader Dashboard', 'User Dashboard'],
     'courses': ['Courses', 'Create Course', 'Enrollments'],
     'User Managements': ['Department Wise Training', 'Level Wise Sheet'],
     'notifications': ['Notification', 'Approval List'],
@@ -67,7 +67,7 @@ const fallbackLinkPermissions: Record<string, Record<string, string[]>> = {
     'groups':['Groups','Group Creation'],
   },
   employee: {
-    'lms-dashboard': ['Employee Dashboard'],
+    'lms-dashboard': ['User Dashboard'],
     'courses': ['Courses'],
     'groups':['Groups'],
     'notifications': ['Notification'],
@@ -79,27 +79,56 @@ const fallbackLinkPermissions: Record<string, Record<string, string[]>> = {
 
 const tileToModuleMap: Record<string, string | string[]> = {
   'lms-dashboard': ['admin_dashboard', 'team_leader_dashboard', 'employee_dashboard'],
-  'User Managements': 'users',
-  'master-employee': 'users',
-  'process-dojo': 'users',
-  'courses': 'courses',
-  'groups': 'groups',
-  'reports': 'reports',
-  'notifications': 'notifications',
-  'planning': 'planning',
-  'method': 'method',
-  'skill-matrix': 'skill-matrix',
-  'observance-sheet': 'assessments',
-  'level-curriculum': 'assessments',
-  'analytics': 'reports',
+  'User Managements': ['users', 'user_creation', 'user_table', 'level_wise_sheet', 'employee_history_card'],
+  'master-employee': ['users', 'user_table', 'employee_history_card'],
+  'process-dojo': ['users', 'user_registration'],
+  'courses': ['courses', 'course_catalog', 'create_course', 'enrollments'],
+  'groups': ['groups', 'group_creation', 'groups_directory', 'enrollments'],
+  'reports': ['reports', 'course_reports', 'employee_reports', 'certificate'],
+  'notifications': ['notifications', 'notifications_page'],
+  'planning': ['planning', 'schedule', 'tni', 'multiskill_schedule', 'core_configuration'],
+  'method': ['method', 'method_settings', 'hierarchy'],
+  'skill-matrix': ['skill_matrix'],
+  'observance-sheet': ['assessments', 'level_assessment', 'competency_dashboard'],
+  'level-curriculum': ['lesson_materials', 'ai_chat_bot', 'ai_assistant', 'assessments'],
+  'analytics': ['reports', 'course_reports', 'employee_reports'],
   'settings': 'roles',
-  'ar-vr': 'ai-tools',
+  'ar-vr': ['ai_tools', 'ar_vr_experience', 'animations'],
 };
 
-const linkToModuleMap: Record<string, string> = {
+const linkToModuleMap: Record<string, string | string[]> = {
   'Admin Dashboard': 'admin_dashboard',
   'Team Leader Dashboard': 'team_leader_dashboard',
-  'Employee Dashboard': 'employee_dashboard',
+  'User Dashboard': 'employee_dashboard',
+  'User Creation': ['user_creation', 'users'],
+  'User Table': ['user_table', 'users'],
+  'Employee History Card': ['employee_history_card', 'users'],
+  'User Id Registration': ['user_registration', 'users'],
+  'Registration': ['user_registration', 'users'],
+  'Level Wise Sheet': ['level_wise_sheet', 'users'],
+  'Create Course': ['create_course', 'courses'],
+  'Courses': ['course_catalog', 'courses'],
+  'Enrollments': ['enrollments', 'courses', 'groups'],
+  'Group Creation': ['group_creation', 'groups'],
+  'Groups': ['groups_directory', 'groups'],
+  'Course Reports': ['course_reports', 'reports'],
+  'Employee Reports': ['employee_reports', 'reports'],
+  'Certificate': ['certificate', 'reports'],
+  'Notification': ['notifications_page', 'notifications'],
+  'Lesson Materials': 'lesson_materials',
+  'AI Chat Bot': ['ai_chat_bot', 'ai_tools'],
+  'AI Assistant': ['ai_assistant', 'ai_tools'],
+  'Schedule': ['schedule', 'planning'],
+  'TNI': ['tni', 'planning'],
+  'Method Settings': ['method_settings', 'method'],
+  'Hierarchy': ['hierarchy', 'method'],
+  'Level Assessment': ['level_assessment', 'assessments'],
+  'Competency Dashboard': ['competency_dashboard', 'assessments'],
+  'AR/VR Experience': ['ar_vr_experience', 'ai_tools'],
+  'Animations': ['animations', 'ai_tools'],
+  'Multiskill Schedule': ['multiskill_schedule', 'planning'],
+  'Core Configuration': ['core_configuration', 'planning'],
+  'Skill Matrix': 'skill_matrix',
 };
 
 const normalizeModuleSlug = (moduleSlug: string) => moduleSlug.replace(/-/g, '_');
@@ -144,10 +173,6 @@ export function resolveDashboardRoute(user: AppUser) {
 }
 
 export function resolveDefaultLandingPath(user: AppUser) {
-  const roleName = String(user?.role || '').toLowerCase();
-  if (roleName === 'admin') {
-    return '/home';
-  }
   return resolveDashboardRoute(user);
 }
 
@@ -181,7 +206,9 @@ export function getAllowedLinksForTile<T extends { name: string }>(
     return links.filter((link) => {
       const linkedModule = linkToModuleMap[link.name];
       if (linkedModule) {
-        return hasModuleAccess(user, linkedModule);
+        return Array.isArray(linkedModule)
+          ? hasAnyModuleAccess(user, linkedModule)
+          : hasModuleAccess(user, linkedModule);
       }
       return canAccessTile(user, tileId);
     });

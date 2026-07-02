@@ -10,7 +10,7 @@ const preloadedState = persistedAuth
       auth: {
         ...JSON.parse(persistedAuth),
         isAuthenticated: true,
-        loading: false,
+        loading: true,
       },
     }
   : undefined;

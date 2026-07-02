@@ -2,21 +2,22 @@
 
 
 // src/components/Navigation/ExpandableSidePanel.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronRight, Search as SearchIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { type TabId, dashboardLinks, tableLinks, formLinks, tabs, tiles } from '../../constants/tileData';
-import { linkPermissions } from '../../constants/permissions';
+import { getAllowedLinksForTile } from '../../constants/permissions';
 
 interface ExpandableSidePanelProps {
   activeTab: TabId;
   isOpen: boolean;
   onClose: () => void;
   userRole: string;
+  user?: { role?: string; permissions?: Record<string, { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; approve?: boolean; export?: boolean; manage?: boolean }> } | null;
 }
 
-export const ExpandableSidePanelNew = ({ activeTab, isOpen, onClose, userRole }: ExpandableSidePanelProps) => {
+export const ExpandableSidePanelNew = ({ activeTab, isOpen, onClose, userRole, user }: ExpandableSidePanelProps) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const currentTab = tabs.find(t => t.id === activeTab);
@@ -51,18 +52,14 @@ export const ExpandableSidePanelNew = ({ activeTab, isOpen, onClose, userRole }:
       );
     }
 
-    // 2. FILTER BY ROLE
-    const rolePerms = (linkPermissions as any)[userRole];
-    if (!rolePerms) return [];
-
-    let filtered = rawLinks.filter(link => {
-      if (link.tileId && rolePerms[link.tileId]) {
-        return rolePerms[link.tileId].includes(link.name);
+    const effectiveUser = user || { role: userRole };
+    const filtered = rawLinks.filter(link => {
+      if (!link.tileId) {
+        return false;
       }
-      return false;
+      return getAllowedLinksForTile(effectiveUser, link.tileId, [link]).length > 0;
     });
 
-    // 3. FILTER BY SEARCH
     if (!searchQuery.trim()) return filtered;
     return filtered.filter(link => 
       link.name.toLowerCase().includes(searchQuery.toLowerCase())

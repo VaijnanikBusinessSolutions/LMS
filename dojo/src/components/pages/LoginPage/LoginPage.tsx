@@ -50,10 +50,10 @@ export const LoginPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (!loading && isAuthenticated && user) {
       navigate(resolveDefaultLandingPath(user), { replace: true });
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [loading, isAuthenticated, user, navigate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

@@ -49,7 +49,7 @@ class IsAdminOrTeamLeadOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
 
-        if hasattr(request.user, 'lms_profile') and request.user.lms_profile.userType == 'team-leader':
+        if request.user.has_any_module_permission('courses', ('create', 'update', 'approve', 'manage')):
             return True
 
         return (
@@ -61,7 +61,7 @@ class IsAdminOrTeamLeadOrReadOnly(BasePermission):
         if request.user.has_module_permission('courses', 'manage'):
             return True
 
-        if hasattr(request.user, 'lms_profile') and request.user.lms_profile.userType == 'team-leader':
+        if request.user.has_any_module_permission('courses', ('create', 'update', 'approve', 'manage')):
             return obj.assigned_by == request.user
 
         return False

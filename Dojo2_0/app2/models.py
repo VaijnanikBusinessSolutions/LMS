@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 from django.conf import settings 
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -213,13 +214,13 @@ class Group(models.Model):
     team_leaders = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='led_groups',
-        limit_choices_to={'lms_profile__userType': 'team-leader'}, 
+        limit_choices_to=Q(role__permissions__codename__in=['create_groups', 'update_groups', 'manage_groups']),
         blank=True
     )
     employees = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='member_of_groups',
-        limit_choices_to={'lms_profile__userType': 'employee'},
+        limit_choices_to=Q(role__permissions__codename='view_courses') & ~Q(role__permissions__codename='manage_courses'),
         blank=True
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -233,7 +234,7 @@ class CourseAssignment(models.Model):
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
         related_name='assigned_courses',
-        limit_choices_to={'lms_profile__userType__in': ['employee', 'team-leader']}
+        limit_choices_to=Q(role__permissions__codename__in=['view_courses', 'create_courses', 'update_courses']) & ~Q(role__permissions__codename='manage_courses')
     )
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='assignments')
     assigned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='assignments_created')

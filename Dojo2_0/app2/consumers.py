@@ -114,7 +114,7 @@ class GroupChatConsumer(AsyncWebsocketConsumer):
             # --- LOGIC B: If User has an LMS Profile (Standard logic) ---
             elif hasattr(user, 'lms_profile'):
                 sender_name = f"{user.lms_profile.firstName} {user.lms_profile.lastName}"
-                role = user.lms_profile.userType
+                role = user.role_name or user.lms_profile.userType
                 if user.lms_profile.profileImage:
                     avatar = user.lms_profile.profileImage.url
             

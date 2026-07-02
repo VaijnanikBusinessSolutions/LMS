@@ -9,9 +9,10 @@ import pandas as pd
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin, Permission
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
-from .rbac import RBAC_ACTIONS, RBAC_MODULES, build_permission_codename, normalize_action, normalize_module_slug
+from .rbac import RBAC_ACTIONS, RBAC_MODULES, build_permission_codename, normalize_action, normalize_module_slug, permission_label, inherited_parent_modules
 from django.core.validators import RegexValidator
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
@@ -60,27 +61,11 @@ class Role(models.Model):
     def normalized_name(self):
         return (self.name or "").strip().lower()
 
-    @classmethod
-    def get_default_roles(cls):
-        """
-        Ensure required roles exist.
-        We integrate the LMS roles here: 'admin', 'team-leader', 'employee'
-        """
-        required_roles = [
-            cls.ADMIN,          # 'admin'
-            cls.TEAM_LEADER,    # 'team-leader'
-            cls.EMPLOYEE,       # 'employee'
-        ]
-        
-        roles_list = []
-        for role_name in required_roles:
-            role, created = cls.objects.get_or_create(name=role_name)
-            roles_list.append(role)
-        return roles_list
-
     def has_permission(self, module_slug, action='view'):
         if not self.is_active or not module_slug:
             return False
+        if self.normalized_name == normalize_module_slug(self.ADMIN):
+            return True
         codename = build_permission_codename(module_slug, action)
         return self.permissions.filter(codename=codename).exists()
 
@@ -132,7 +117,27 @@ class PermissionModule(models.Model):
                 if updates:
                     module.save(update_fields=updates)
             modules.append(module)
+        cls.objects.exclude(slug__in=[slug.replace('_', '-') for slug in RBAC_MODULES.keys()]).filter(is_active=True).update(is_active=False)
         return modules
+
+
+def sync_rbac_permissions():
+    PermissionModule.sync_default_modules()
+
+    content_type = ContentType.objects.get_for_model(PermissionModule)
+
+    for module_slug in RBAC_MODULES.keys():
+        normalized_slug = normalize_module_slug(module_slug)
+        for action in RBAC_ACTIONS.keys():
+            codename = build_permission_codename(normalized_slug, action)
+            permission, created = Permission.objects.get_or_create(
+                content_type=content_type,
+                codename=codename,
+                defaults={'name': permission_label(normalized_slug, action)},
+            )
+            if not created and permission.name != permission_label(normalized_slug, action):
+                permission.name = permission_label(normalized_slug, action)
+                permission.save(update_fields=['name'])
 
 
 class RoleModulePermission(models.Model):
@@ -180,18 +185,9 @@ class CustomUserManager(BaseUserManager):
         
         email = self.normalize_email(email)
         
-        # Ensure a role is provided, default to Employee if not set
+        # User creation must specify a role explicitly.
         if 'role' not in extra_fields:
-            # We look up the Role object by name
-            from .models import Role 
-            # Ideally, handle DoesNotExist here, but for now assuming roles are seeded
-            try:
-                role_obj = Role.objects.get(name=Role.EMPLOYEE)
-            except Role.DoesNotExist:
-                # Fallback: create the role if it doesn't exist yet
-                role_obj = Role.objects.create(name=Role.EMPLOYEE)
-            
-            extra_fields['role'] = role_obj
+            raise ValueError(_('Role is required'))
 
         user = self.model(email=email, **extra_fields)
         
@@ -213,10 +209,8 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('last_name', 'User')
         extra_fields.setdefault('employeeid', 'ADMIN001') 
 
-        # Handle the role for superuser -> force 'admin'
-        from .models import Role
-        admin_role, _ = Role.objects.get_or_create(name=Role.ADMIN)
-        extra_fields['role'] = admin_role
+        if 'role' not in extra_fields:
+            raise ValueError(_('Superuser role is required. Create/select the admin role from Role Management first.'))
 
         if extra_fields.get('is_staff') is not True:
             raise ValueError(_('Superuser must have is_staff=True.'))
@@ -280,18 +274,22 @@ class User(AbstractBaseUser, PermissionsMixin):
         """Returns the string name of the role"""
         return self.role.name if self.role else None
 
+    @property
+    def normalized_role_name(self):
+        return normalize_module_slug(self.role_name)
+
     # --- Helper properties to match LMS logic style ---
     @property
     def is_admin_role(self):
-        return self.role.name == Role.ADMIN
+        return self.normalized_role_name == normalize_module_slug(Role.ADMIN)
 
     @property
     def is_team_leader(self):
-        return self.role.name == Role.TEAM_LEADER
+        return self.normalized_role_name == normalize_module_slug(Role.TEAM_LEADER)
 
     @property
     def is_employee(self):
-        return self.role.name == Role.EMPLOYEE
+        return self.normalized_role_name == normalize_module_slug(Role.EMPLOYEE)
 
     def has_module_permission(self, module_slug, action='view'):
         if not self.is_authenticated or not self.is_active:
@@ -300,11 +298,36 @@ class User(AbstractBaseUser, PermissionsMixin):
             return True
         if not self.role_id or not self.role or not self.role.is_active:
             return False
-        return self.role.has_permission(module_slug, action)
+        normalized_slug = normalize_module_slug(module_slug)
+        if self.role.has_permission(normalized_slug, action):
+            return True
+
+        return any(
+            self.role.has_permission(parent_slug, action)
+            for parent_slug in inherited_parent_modules(normalized_slug)
+        )
+
+    def has_any_module_permission(self, module_slug, actions):
+        return any(self.has_module_permission(module_slug, action) for action in actions)
+
+    def get_lms_user_type(self):
+        if self.has_module_permission('admin_dashboard', 'view'):
+            return Role.ADMIN
+        if self.has_module_permission('team_leader_dashboard', 'view'):
+            return Role.TEAM_LEADER
+        return Role.EMPLOYEE
 
     def get_accessible_modules(self):
         if not self.role_id or not self.role:
             return {}
+        if self.role.normalized_name == normalize_module_slug(Role.ADMIN):
+            return {
+                module_slug: {
+                    'name': config['name'],
+                    **{action: True for action in RBAC_ACTIONS.keys()},
+                }
+                for module_slug, config in RBAC_MODULES.items()
+            }
         modules = {
             module_slug: {
                 'name': config['name'],
@@ -318,6 +341,16 @@ class User(AbstractBaseUser, PermissionsMixin):
                 for action in RBAC_ACTIONS.keys():
                     if permission.codename == build_permission_codename(normalized_slug, action):
                         modules[normalized_slug][action] = True
+
+        for module_slug in RBAC_MODULES.keys():
+            normalized_slug = normalize_module_slug(module_slug)
+            parent_slugs = inherited_parent_modules(normalized_slug)
+            if not parent_slugs:
+                continue
+
+            for action in RBAC_ACTIONS.keys():
+                if any(modules[parent_slug][action] for parent_slug in parent_slugs if parent_slug in modules):
+                    modules[normalized_slug][action] = True
         return modules
 
 from django.db import models
@@ -491,6 +524,12 @@ def create_default_station_types(sender, **kwargs):
             StationType.objects.get_or_create(code=code, defaults={'name': name})
         print("✅ Station Types (Names & Codes) ensured in Database")
         
+@receiver(post_migrate)
+def ensure_rbac_defaults(sender, **kwargs):
+    if sender.name != 'app1':
+        return
+    sync_rbac_permissions()
+
 # class HierarchyStructure(models.Model):
 #     structure_id = models.AutoField(primary_key=True)
 #     structure_name = models.CharField(max_length=200)

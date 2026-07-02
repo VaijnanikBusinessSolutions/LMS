@@ -630,7 +630,7 @@ const PassedUsersTable: React.FC = () => {
     setIsEditModalOpen(true);
     setSelectedUser(userToEdit);
     try {
-      const response = await fetch(`${API_ENDPOINTS.BASE_URL}/users/${idToFetch}/`);
+      const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.USER_BY_TEMP_ID(idToFetch)}`);
       if (!response.ok) throw new Error('Failed to fetch user details.');
       const apiResponseData: any = await response.json();
 
@@ -660,7 +660,7 @@ const PassedUsersTable: React.FC = () => {
   const handleDeleteUser = async (userId: string) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
       try {
-        const response = await fetch(`${API_ENDPOINTS.BASE_URL}/users/${userId}/`, {
+        const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.USER_BY_TEMP_ID(userId)}`, {
           method: 'DELETE',
         });
         if (!response.ok) throw new Error('Failed to delete user.');

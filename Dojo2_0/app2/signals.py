@@ -2,12 +2,27 @@ from django.db.models.signals import post_save, m2m_changed, pre_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from app1.models import Role
 from .models import (
     CourseAssignment, AnswerSubmission, Notification, 
     Course, Group, LessonProgress, Lesson, LMSProfile
 )
 
 User = get_user_model()
+
+
+def sync_lms_profile(user):
+    defaults = {
+        'firstName': user.first_name,
+        'lastName': user.last_name,
+        'userType': user.get_lms_user_type(),
+        'designation': user.designation,
+        'department': user.department,
+        'hq': user.hq,
+        'bu': user.business_unit,
+        'section': user.section,
+    }
+    LMSProfile.objects.update_or_create(user=user, defaults=defaults)
 
 # --- HELPER FUNCTION ---
 def create_notification(recipient, title, message, sender=None, type='info',related_id=None):
@@ -111,13 +126,17 @@ def notify_course_created(sender, instance, created, **kwargs):
         title = "New Course Available"
         message = f"A new course '{instance.title}' has been published by {instructor_name}. Check it out!"
 
-        # A. Notify Employees (Use lms_profile__userType)
-        employees = User.objects.filter(lms_profile__userType='employee')
+        employees = User.objects.filter(
+            role__permissions__codename='view_courses'
+        ).exclude(
+            role__permissions__codename='manage_courses'
+        ).distinct()
         for emp in employees:
             create_notification(emp, title, message, instance.instructor, 'info')
 
-        # B. Notify Team Leaders (Use lms_profile__userType)
-        team_leaders = User.objects.filter(lms_profile__userType='team-leader')
+        team_leaders = User.objects.filter(
+            role__permissions__codename__in=['create_groups', 'update_groups', 'manage_groups']
+        ).distinct()
         for leader in team_leaders:
             create_notification(leader, title, message, instance.instructor, 'info')
 
@@ -229,29 +248,16 @@ def create_lms_profile(sender, instance, created, **kwargs):
     When a Standard Dojo User is created, automatically create 
     an LMS Profile for them so they can access the LMS.
     """
-    if created:
-        # Check if the user has a Role (Standard Dojo Logic)
-        user_type = 'employee' # Default
-        
-        # Mapping Dojo Roles to LMS Roles
-        # Adjust these role names to match your Dojo Database exactly
-        if instance.role and instance.role.name.lower() in ['admin', 'manager', 'director']:
-            user_type = 'admin'
-        elif instance.role and instance.role.name.lower() in ['supervisor', 'team lead', 'lead']:
-            user_type = 'team-leader'
-            
-        LMSProfile.objects.create(
-            user=instance,
-            # Copy basic details from the Master User to the Profile
-            firstName=instance.first_name, 
-            lastName=instance.last_name,
-            userType=instance.role.name,
-            designation=instance.designation,
-            department=instance.department,
-            hq=instance.hq,
-            bu=instance.business_unit,
-            section=instance.section,
-        )
+    sync_lms_profile(instance)
+
+
+@receiver(m2m_changed, sender=Role.permissions.through)
+def sync_role_users_lms_profiles(sender, instance, action, **kwargs):
+    if action not in {'post_add', 'post_remove', 'post_clear'}:
+        return
+
+    for user in instance.users.all():
+        sync_lms_profile(user)
 
 # ... (Keep all your existing imports) ...
 from .models import (

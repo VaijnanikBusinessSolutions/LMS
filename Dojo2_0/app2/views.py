@@ -94,6 +94,14 @@ def get_ai_engine():
     from .ai_engine import LMSAIEngine
     return LMSAIEngine
 
+
+def has_team_scope(user, module_slug):
+    return user.has_any_module_permission(module_slug, ('create', 'update', 'approve', 'manage'))
+
+
+def has_self_scope(user, module_slug):
+    return user.has_module_permission(module_slug, 'view')
+
 # =====================================================
 # 1. USER VIEWSET (Refactored for Profiles)
 # =====================================================
@@ -121,20 +129,19 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def admin(self, request):
-        # FIX 3: Filter directly on userType, not lms_profile__userType
-        admin_profiles = self.get_queryset().filter(userType='admin')
+        admin_profiles = self.get_queryset().filter(userType=Role.ADMIN)
         serializer = self.get_serializer(admin_profiles, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def team_leaders(self, request):
-        tl_profiles = self.get_queryset().filter(userType='team-leader')
+        tl_profiles = self.get_queryset().filter(userType=Role.TEAM_LEADER)
         serializer = self.get_serializer(tl_profiles, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def employees(self, request):
-        emp_profiles = self.get_queryset().filter(userType='employee')
+        emp_profiles = self.get_queryset().filter(userType=Role.EMPLOYEE)
         serializer = self.get_serializer(emp_profiles, many=True)
         return Response(serializer.data)
 
@@ -183,7 +190,7 @@ class CourseViewSet(viewsets.ModelViewSet):
 
         # CHECK PROFILE TYPE
         if self.action == 'list':
-            if hasattr(user, 'lms_profile') and user.lms_profile.userType == 'employee':
+            if self.action == 'list' and has_self_scope(user, 'courses') and not has_team_scope(user, 'courses'):
                 # Hide assigned courses from the general list so they don't buy/enroll again
                 queryset = queryset.exclude(assignments__employee=user)
 
@@ -455,9 +462,8 @@ class TeamLeaderViewSet(viewsets.ViewSet):
 
     def list(self, request):
         user = request.user
-        # Check Profile Role
-        if not hasattr(user, 'lms_profile') or user.lms_profile.userType != 'team-leader':
-            return Response({"error": "Only Team Leaders can access this"}, status=status.HTTP_403_FORBIDDEN)
+        if not has_team_scope(user, 'groups'):
+            return Response({"error": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
 
         my_groups = Group.objects.filter(team_leaders=user)
         total_employees = User.objects.filter(member_of_groups__in=my_groups).distinct().count()
@@ -778,8 +784,8 @@ class GroupViewSet(viewsets.ModelViewSet):
         if not hasattr(user, 'lms_profile'): return Group.objects.none()
 
         if user.has_module_permission('groups', 'manage'): return Group.objects.all()
-        if user.lms_profile.userType == 'team-leader': return user.led_groups.all()
-        if user.lms_profile.userType == 'employee': return user.member_of_groups.all()
+        if has_team_scope(user, 'groups'): return user.led_groups.all()
+        if has_self_scope(user, 'groups'): return user.member_of_groups.all()
         return Group.objects.none()
 
     def perform_create(self, serializer):
@@ -798,9 +804,9 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
 
         if user.has_module_permission('courses', 'manage'):
             return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').all()
-        if user.lms_profile.userType == 'team-leader': 
+        if has_team_scope(user, 'courses'):
             return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').filter(assigned_by=user)
-        if user.lms_profile.userType == 'employee': 
+        if has_self_scope(user, 'courses'):
             return CourseAssignment.objects.select_related('employee', 'course', 'assigned_by').filter(employee=user)
         
         return CourseAssignment.objects.none()
@@ -812,14 +818,16 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
     def get_assignable_employees(self, request):
         user = request.user
         employees = User.objects.select_related('lms_profile').filter(
-            lms_profile__userType__in=['employee', 'team-leader']
-        )
+            role__permissions__codename__in=['view_courses', 'create_courses', 'update_courses']
+        ).exclude(
+            role__permissions__codename='manage_courses'
+        ).distinct()
 
         # 2. Filter logic (Admin vs Team Leader)
-        if hasattr(user, 'lms_profile') and user.lms_profile.userType == 'team-leader':
+        if has_team_scope(user, 'courses'):
             my_groups = user.led_groups.all()
             employees = employees.filter(member_of_groups__in=my_groups).distinct()
-        elif hasattr(user, 'lms_profile') and user.lms_profile.userType == 'employee':
+        elif has_self_scope(user, 'courses'):
             return Response({"error": "Employees cannot assign courses."}, status=status.HTTP_403_FORBIDDEN)
 
         employees = employees.prefetch_related('assigned_courses')
@@ -872,15 +880,14 @@ class CourseAssignmentViewSet(viewsets.ModelViewSet):
         if not (
             user.has_module_permission('courses', 'create')
             or user.has_module_permission('courses', 'manage')
-            or (hasattr(user, 'lms_profile') and user.lms_profile.userType == 'team-leader')
+            or user.has_module_permission('courses', 'update')
         ):
              return Response({"error": "Only authorized users can assign courses."}, status=status.HTTP_403_FORBIDDEN)
 
         for emp_id in employee_ids:
             try:
                 employee = User.objects.get(id=emp_id)
-                valid_types = ['employee', 'team-leader']
-                if not (hasattr(employee, 'lms_profile') and employee.lms_profile.userType in valid_types):
+                if not employee.has_any_module_permission('courses', ('view', 'create', 'update')):
                     logger.warning(f"Bulk Assign: Skipping user {employee.email}: Not an assignable role.")
                     skipped_count += 1
                     continue
@@ -958,8 +965,11 @@ class EmployeeReportViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        # Filter by PROFILE userType
-        return User.objects.select_related('lms_profile').filter(lms_profile__userType='employee').order_by('-created_at')
+        return User.objects.select_related('lms_profile').filter(
+            role__permissions__codename='view_courses'
+        ).exclude(
+            role__permissions__codename='manage_courses'
+        ).distinct().order_by('-created_at')
 
     def get_serializer_class(self):
         return EmployeeListSerializer
@@ -1506,28 +1516,22 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = LessonAttachment.objects.select_related('lesson', 'lesson__course')
 
-        # 1. Admin/Staff see everything
+        # 1. Full managers see everything
         if user.has_module_permission('courses', 'manage'):
             pass # No filtering needed for admins
 
-        # 2. Check LMS Profile for specific roles
-        elif hasattr(user, 'lms_profile'):
-            role = user.lms_profile.userType
+        elif has_team_scope(user, 'courses') or has_team_scope(user, 'groups'):
+            qs = qs.filter(
+                lesson__course__groups__team_leaders=user
+            ).distinct()
 
-            if role == 'employee':
-                qs = qs.filter(
-                    Q(lesson__course__groups__employees=user) | 
-                    Q(lesson__course__assignments__employee=user)
-                ).distinct()
+        elif has_self_scope(user, 'courses'):
+            qs = qs.filter(
+                Q(lesson__course__groups__employees=user) |
+                Q(lesson__course__assignments__employee=user)
+            ).distinct()
 
-            elif role == 'team-leader':
-                # Team leaders see materials for groups they lead
-                qs = qs.filter(
-                    lesson__course__groups__team_leaders=user
-                ).distinct()
-        
         else:
-            # Fallback: If no profile or unknown role, return nothing
             return LessonAttachment.objects.none()
 
         # 3. Optional: Filter by specific lesson if query param provided
@@ -1603,19 +1607,11 @@ class CourseReportStatsView(APIView):
         # 2. Start with All Courses
         courses_qs = Course.objects.all().order_by('-created')
 
-        if user.has_module_permission('reports', 'manage'):
-            user_role = 'manager'
-        elif user.has_module_permission('reports', 'view'):
-            user_role = 'role-based'
-        else:
-            user_role = 'employee'
+        if not user.has_module_permission('reports', 'manage'):
+            if not user.has_module_permission('reports', 'view'):
+                return Response({"error": "Unauthorized"}, status=403)
 
-        # 3. APPLY ROLE FILTERING
-        if not user.has_module_permission('reports', 'manage') and hasattr(user, 'lms_profile'):
-            user_role = user.lms_profile.userType
-            
-            if user_role == 'team-leader':
-                
+            if has_team_scope(user, 'courses') or has_team_scope(user, 'groups'):
                 assigned_course_ids = CourseAssignment.objects.filter(
                     assigned_by=user
                 ).values_list('course_id', flat=True)
@@ -1629,10 +1625,12 @@ class CourseReportStatsView(APIView):
                 
                 # Filter the main queryset
                 courses_qs = courses_qs.filter(id__in=relevant_ids)
-                
-            elif user_role == 'employee':
-                # Optional: Block employees from seeing reports entirely
-                # or only show courses they are enrolled in
+            elif has_self_scope(user, 'courses'):
+                own_course_ids = CourseAssignment.objects.filter(
+                    employee=user
+                ).values_list('course_id', flat=True)
+                courses_qs = courses_qs.filter(id__in=own_course_ids)
+            else:
                 return Response({"error": "Unauthorized"}, status=403)
 
         # 4. Serialize the Filtered Courses
@@ -1699,13 +1697,14 @@ class TrainingScheduleViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = TrainingSchedule.objects.select_related('group', 'trainer').all()
 
-        # 1. Security: Filter by User Role
+        # 1. Security: Filter by permission scope
         if not user.has_module_permission('planning', 'manage'):
-            if hasattr(user, 'lms_profile'):
-                if user.lms_profile.userType == 'team-leader':
-                    queryset = queryset.filter(group__team_leaders=user)
-                elif user.lms_profile.userType == 'employee':
-                    queryset = queryset.filter(group__employees=user)
+            if has_team_scope(user, 'planning') or has_team_scope(user, 'groups'):
+                queryset = queryset.filter(group__team_leaders=user)
+            elif has_self_scope(user, 'planning') or has_self_scope(user, 'groups'):
+                queryset = queryset.filter(group__employees=user)
+            else:
+                return TrainingSchedule.objects.none()
 
         # 2. Filter for Calendar View
         group_id = self.request.query_params.get('group_id')
@@ -2442,7 +2441,12 @@ class CompetencyMatrixViewSet(viewsets.ViewSet):
 
         # 2. Base Employee Query 
         # We use __iexact to ignore case sensitivity (e.g., "IT" vs "it")
-        employees = User.objects.filter(is_active=True, lms_profile__userType='employee').select_related('lms_profile')
+        employees = User.objects.filter(
+            is_active=True,
+            role__permissions__codename='view_courses'
+        ).exclude(
+            role__permissions__codename='manage_courses'
+        ).select_related('lms_profile').distinct()
         
         if hq: employees = employees.filter(lms_profile__hq__iexact=hq)
         if bu: employees = employees.filter(lms_profile__bu__iexact=bu)
@@ -2752,7 +2756,7 @@ class AssessmentHistoryViewSet(viewsets.ViewSet):
         user = request.user
         
         # 1. Fetch from History Log (not the Matrix)
-        if user.is_staff or (hasattr(user, 'lms_profile') and user.lms_profile.userType in ['admin', 'team-leader']):
+        if user.is_staff or user.has_module_permission('reports', 'manage') or has_team_scope(user, 'courses'):
             queryset = CompetencyAssessmentLog.objects.all()
         else:
             queryset = CompetencyAssessmentLog.objects.filter(employee=user)

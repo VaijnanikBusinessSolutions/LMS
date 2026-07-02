@@ -22,6 +22,8 @@ class LMSProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='user.email', read_only=True)
     id = serializers.IntegerField(source='user.id', read_only=True)
     is_active = serializers.BooleanField(source='user.is_active', read_only=True)
+    userType = serializers.SerializerMethodField()
+    roleName = serializers.CharField(source='user.role_name', read_only=True)
     
     # ADD THESE TWO LINES:
     is_staff = serializers.BooleanField(source='user.is_staff', read_only=True)
@@ -31,12 +33,16 @@ class LMSProfileSerializer(serializers.ModelSerializer):
         model = LMSProfile
         fields = [
             'id', 'email', 'firstName', 'lastName', 'userType',
+            'roleName',
             'phoneNumber', 'bio', 'companyName', 'profileImage',
             'is_active', 
             'is_staff',     
             'is_superuser',
             'designation', 'department','hq','bu','section', 
         ]
+
+    def get_userType(self, obj):
+        return obj.user.get_lms_user_type()
 
 
 # =====================================================
@@ -394,12 +400,18 @@ class GroupSerializer(serializers.ModelSerializer):
     # UPDATE: Filter by LMS PROFILE UserType
     team_leaders = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=User.objects.filter(lms_profile__userType='team-leader'),
+        queryset=User.objects.filter(
+            role__permissions__codename__in=['create_groups', 'update_groups', 'manage_groups']
+        ).distinct(),
         required=False
     )
     employees = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=User.objects.filter(lms_profile__userType='employee'),
+        queryset=User.objects.filter(
+            role__permissions__codename='view_courses'
+        ).exclude(
+            role__permissions__codename='manage_courses'
+        ).distinct(),
         required=False
     )
 
@@ -453,9 +465,7 @@ class CourseAssignmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['assigned_by', 'assigned_at']
 
     def validate_employee(self, value):
-        # UPDATE: Check profile userType
-        assignable_roles = ['employee', 'team-leader']
-        if not hasattr(value, 'lms_profile') or value.lms_profile.userType not in assignable_roles:
+        if not value.has_any_module_permission('courses', ('view', 'create', 'update')):
             raise serializers.ValidationError("Courses can only be assigned to Employees or Team Leaders.")
         return value
 

@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
   LOGIN: "/api/login/",
   LOGOUT: "/logout/",
   REFRESH: "/api/token/refresh/",
+  CURRENT_USER: "/users/me/",
   
   EMPLOYEES_UI_LIST: '/mastertable-ui-list/',
   // PASSED_USERS: "/user-body-checks/",
@@ -23,7 +24,7 @@ export const API_ENDPOINTS = {
   PASSED_USER_BY_ID: (tempId: string) => `/user-body-checks/?temp_id=${tempId}/`,
 
   TEMP_USER_INFO: "/temp-user-info/",
-  USER_BY_TEMP_ID: (tempId: string) => `/users/${tempId}/`,
+  USER_BY_TEMP_ID: (tempId: string) => `/temp-user-info/${tempId}/`,
   ALL_PASSED_USERS: '/user-body-checks/',
   HUMAN_BODY_CHECKS: {
     QUESTIONS: '/humanbody-questions/',
