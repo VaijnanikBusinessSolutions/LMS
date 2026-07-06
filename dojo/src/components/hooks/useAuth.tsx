@@ -10,6 +10,7 @@ interface User {
   last_name: string;
   employeeid: string;
   role: UserRole;
+  userType?: string;
   hq: string;
   factory: string;
   department: string;

@@ -1714,8 +1714,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Search, Loader2, CheckCircle2, Building2, Briefcase, Layers, 
+import {
+  Search, Loader2, CheckCircle2, Building2, Briefcase, Layers,
   AlertTriangle, UserCheck, Map as MapIcon, ChevronRight, Save, ArrowLeft,
   LayoutDashboard, Star, TrendingUp, ShieldCheck, History, Calendar,
   Award, Target, Zap, Users, ChevronDown, Filter, RefreshCw, Download,
@@ -1724,6 +1724,7 @@ import {
   Minus, ChevronUp
 } from 'lucide-react';
 import { normalizeListResponse } from '../../utils/api';
+import { hasAnyModuleAction } from '../../components/constants/permissions';
 
 const API_BASE = 'http://127.0.0.1:8000/lms';
 
@@ -1739,16 +1740,14 @@ const getAuthHeaders = (): Record<string, string> => {
   }
 };
 
-const getUserRole = (): string => {
-    try {
-        const authData = localStorage.getItem("auth");
-        const user = authData ? JSON.parse(authData).user : null;
-        const role = user?.role_name || user?.role || 'employee'; 
-        return role.toLowerCase();
-    } catch (e) {
-        return 'employee';
-    }
-}
+const getAuthUser = () => {
+  try {
+    const authData = localStorage.getItem("auth");
+    return authData ? JSON.parse(authData).user ?? null : null;
+  } catch (e) {
+    return null;
+  }
+};
 
 // Level Configuration with Dark Mode Classes
 const LEVEL_CONFIG = {
@@ -1870,8 +1869,17 @@ interface AssessmentResult {
 
 const CompetencySystem: React.FC = () => {
   const navigate = useNavigate();
-  const [userRole, setUserRole] = useState<string>('employee');
   const [loading, setLoading] = useState(true);
+  const authUser = useMemo(() => getAuthUser(), []);
+  const canManageAssessments = useMemo(
+    () =>
+      hasAnyModuleAction(
+        authUser,
+        ['level_assessment', 'assessments'],
+        ['create', 'update', 'delete', 'approve', 'manage'],
+      ),
+    [authUser],
+  );
 
   // --- DATA STATES ---
   const [myCompetencies, setMyCompetencies] = useState<CompetencyRecord[]>([]);
@@ -1911,13 +1919,10 @@ const CompetencySystem: React.FC = () => {
 
   // --- INITIAL LOAD ---
   useEffect(() => {
-    const role = getUserRole();
-    setUserRole(role);
-
     const initData = async () => {
       setLoading(true);
       try {
-        if (role === 'employee') {
+        if (!canManageAssessments) {
             const res = await fetch(`${API_BASE}/assessment-history/`, { headers: getAuthHeaders() });
             if(res.ok) {
                 const data = await res.json();
@@ -1973,7 +1978,7 @@ const CompetencySystem: React.FC = () => {
       }
     };
     initData();
-  }, []);
+  }, [canManageAssessments]);
 
   // --- DATA PROCESSING ---
   const sortedHistory = useMemo(() => {
@@ -2216,7 +2221,7 @@ const CompetencySystem: React.FC = () => {
     setLoadingHistory(true);
     try {
       let url = `${API_BASE}/assessment-history/`;
-      if (userRole !== 'employee') {
+      if (canManageAssessments) {
           url += `?user_id=${employeeId}`;
       }
 
@@ -2228,7 +2233,7 @@ const CompetencySystem: React.FC = () => {
         const data = await res.json();
         const historyData = Array.isArray(data) ? data : [];
         
-        const filteredHistory = userRole !== 'employee'
+        const filteredHistory = canManageAssessments
             ? historyData.filter((r: any) => r.user_id === employeeId || r.employee_id === employeeId)
             : historyData;
 
@@ -2342,7 +2347,7 @@ const CompetencySystem: React.FC = () => {
   // ==========================================
   // VIEW 1: EMPLOYEE DASHBOARD
   // ==========================================
-  if (userRole === 'employee') {
+  if (!canManageAssessments) {
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
             {/* Header */}

@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   LOGOUT: "/logout/",
   REFRESH: "/api/token/refresh/",
   CURRENT_USER: "/users/me/",
+  ROLES: "/roles/",
   
   EMPLOYEES_UI_LIST: '/mastertable-ui-list/',
   // PASSED_USERS: "/user-body-checks/",

@@ -8,6 +8,7 @@ import re
 import pandas as pd
 from django.db import models
 from django.utils import timezone
+from django.db.models import Q
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
@@ -39,10 +40,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 # ------------------ Role Model ------------------
 class Role(models.Model):
-    # We use the specific strings from the LMS project
-    ADMIN = 'admin'
-    TEAM_LEADER = 'team-leader'
-    EMPLOYEE = 'employee'
     name = models.CharField(max_length=50, unique=True)
     permissions = models.ManyToManyField(Permission, blank=True, related_name='rbac_roles')
     is_active = models.BooleanField(default=True)
@@ -64,8 +61,6 @@ class Role(models.Model):
     def has_permission(self, module_slug, action='view'):
         if not self.is_active or not module_slug:
             return False
-        if self.normalized_name == normalize_module_slug(self.ADMIN):
-            return True
         codename = build_permission_codename(module_slug, action)
         return self.permissions.filter(codename=codename).exists()
 
@@ -278,27 +273,19 @@ class User(AbstractBaseUser, PermissionsMixin):
     def normalized_role_name(self):
         return normalize_module_slug(self.role_name)
 
-    # --- Helper properties to match LMS logic style ---
-    @property
-    def is_admin_role(self):
-        return self.normalized_role_name == normalize_module_slug(Role.ADMIN)
-
-    @property
-    def is_team_leader(self):
-        return self.normalized_role_name == normalize_module_slug(Role.TEAM_LEADER)
-
-    @property
-    def is_employee(self):
-        return self.normalized_role_name == normalize_module_slug(Role.EMPLOYEE)
+    def has_full_access(self):
+        return self.is_superuser or self.normalized_role_name in {'admin', 'administrator'}
 
     def has_module_permission(self, module_slug, action='view'):
         if not self.is_authenticated or not self.is_active:
             return False
-        if self.is_superuser:
+        if self.has_full_access():
+            return True
+        normalized_slug = normalize_module_slug(module_slug)
+        if normalized_slug == 'employee_dashboard' and normalize_action(action) == 'view':
             return True
         if not self.role_id or not self.role or not self.role.is_active:
             return False
-        normalized_slug = normalize_module_slug(module_slug)
         if self.role.has_permission(normalized_slug, action):
             return True
 
@@ -311,16 +298,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         return any(self.has_module_permission(module_slug, action) for action in actions)
 
     def get_lms_user_type(self):
-        if self.has_module_permission('admin_dashboard', 'view'):
-            return Role.ADMIN
-        if self.has_module_permission('team_leader_dashboard', 'view'):
-            return Role.TEAM_LEADER
-        return Role.EMPLOYEE
+        return self.role_name or ''
 
     def get_accessible_modules(self):
         if not self.role_id or not self.role:
             return {}
-        if self.role.normalized_name == normalize_module_slug(Role.ADMIN):
+
+        if self.has_full_access():
             return {
                 module_slug: {
                     'name': config['name'],
@@ -328,6 +312,7 @@ class User(AbstractBaseUser, PermissionsMixin):
                 }
                 for module_slug, config in RBAC_MODULES.items()
             }
+
         modules = {
             module_slug: {
                 'name': config['name'],
@@ -335,6 +320,10 @@ class User(AbstractBaseUser, PermissionsMixin):
             }
             for module_slug, config in RBAC_MODULES.items()
         }
+
+        if 'employee_dashboard' in modules:
+            modules['employee_dashboard']['view'] = True
+
         for permission in self.role.permissions.all():
             for module_slug in RBAC_MODULES.keys():
                 normalized_slug = normalize_module_slug(module_slug)
@@ -3024,6 +3013,17 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.recipient or self.recipient_email}"
+
+    @classmethod
+    def inbox_for_user(cls, user):
+        """Return notifications that belong to the signed-in user."""
+        if not user or not getattr(user, 'is_authenticated', False):
+            return cls.objects.none()
+
+        return cls.objects.filter(
+            Q(recipient=user) |
+            Q(recipient_email__iexact=user.email)
+        )
 
     def mark_as_read(self):
         """Mark notification as read"""

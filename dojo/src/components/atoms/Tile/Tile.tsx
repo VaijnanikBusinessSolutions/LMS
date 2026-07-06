@@ -577,7 +577,7 @@ const Tile: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled = f
   const filteredLinks = useMemo(() => {
     if (userRole && tileId) {
       const auth = JSON.parse(localStorage.getItem('auth') || '{}');
-      const effectiveUser = auth?.user || { role: userRole };
+      const effectiveUser = auth?.user || { role: userRole, userType: userRole };
       return getAllowedLinksForTile(effectiveUser, tileId, links || []);
     }
     return links || [];

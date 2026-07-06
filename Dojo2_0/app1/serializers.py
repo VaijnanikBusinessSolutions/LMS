@@ -85,7 +85,6 @@ class RoleSerializer(serializers.ModelSerializer):
             for permission in obj.permissions.filter(content_type__app_label='app1').select_related('content_type')
         }
         serialized_permissions = []
-        is_admin_role = obj.normalized_name == normalize_module_slug(Role.ADMIN)
 
         for module_slug, config in RBAC_MODULES.items():
             item = {
@@ -93,7 +92,7 @@ class RoleSerializer(serializers.ModelSerializer):
                 'module_name': config['name'],
             }
             for action in RBAC_ACTIONS.keys():
-                item[action] = is_admin_role or build_permission_codename(module_slug, action) in role_permissions
+                item[action] = build_permission_codename(module_slug, action) in role_permissions
             serialized_permissions.append(item)
 
         return serialized_permissions
@@ -169,6 +168,12 @@ class PermissionModuleSerializer(serializers.ModelSerializer):
 class UserRBACSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source='role.name', read_only=True)
     permissions = serializers.SerializerMethodField()
+    firstName = serializers.CharField(source='first_name', read_only=True)
+    lastName = serializers.CharField(source='last_name', read_only=True)
+    userType = serializers.CharField(source='role.name', read_only=True)
+    phoneNumber = serializers.CharField(source='phone_number', read_only=True)
+    companyName = serializers.CharField(source='business_unit', read_only=True)
+    profileImage = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -177,10 +182,20 @@ class UserRBACSerializer(serializers.ModelSerializer):
             'role', 'designation', 'business_unit', 'department',
             'section', 'hq', 'line', 'subline', 'factory', 'status',
             'is_active', 'permissions',
+            'firstName', 'lastName', 'userType', 'phoneNumber',
+            'companyName', 'profileImage', 'bio',
         ]
 
     def get_permissions(self, obj):
         return obj.get_accessible_modules()
+
+    def get_profileImage(self, obj):
+        if not obj.profile_image:
+            return None
+
+        request = self.context.get('request')
+        image_url = obj.profile_image.url
+        return request.build_absolute_uri(image_url) if request else image_url
 
 
 # import threading  # <--- THIS WAS MISSING. YOU MUST ADD THIS LINE.
@@ -294,37 +309,74 @@ class RegisterSerializer(serializers.ModelSerializer):
     # --- Field Definitions ---
     role = serializers.CharField(required=True, error_messages={'blank': 'System Role is required.'})
     password = serializers.CharField(write_only=True, required=True)
+    employeeid = serializers.CharField(required=False, allow_blank=True)
     designation = serializers.CharField(required=False, allow_blank=True)
-    department = serializers.CharField(required=True, error_messages={'blank': 'Department is required.'})
+    department = serializers.CharField(required=False, allow_blank=True)
     section = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
-    business_unit = serializers.CharField(required=True, error_messages={'blank': 'Business Unit is required.'})
-    hq = serializers.CharField(required=True, error_messages={'required': 'HQ Location is mandatory.', 'blank': 'HQ Location cannot be blank.'})
+    business_unit = serializers.CharField(required=False, allow_blank=True)
+    hq = serializers.CharField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    bio = serializers.CharField(required=False, allow_blank=True)
+    profile_image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'employeeid', 'first_name', 'last_name', 
             'role', 'password', 'hq', 'business_unit', 'department', 
-            'section', 'designation', 'line', 'subline', 'factory'
+            'section', 'designation', 'line', 'subline', 'factory',
+            'phone_number', 'bio', 'profile_image'
         ]
+
+    def to_internal_value(self, data):
+        mutable_data = data.copy()
+        alias_map = {
+            'firstName': 'first_name',
+            'lastName': 'last_name',
+            'userType': 'role',
+            'phoneNumber': 'phone_number',
+            'companyName': 'business_unit',
+            'profileImage': 'profile_image',
+        }
+
+        for source_key, target_key in alias_map.items():
+            if source_key in mutable_data and target_key not in mutable_data:
+                mutable_data[target_key] = mutable_data.get(source_key)
+
+        mutable_data.pop('username', None)
+        return super().to_internal_value(mutable_data)
 
     # --- Validation Logic ---
     def validate_role(self, value):
         try:
-            Role.objects.get(name=value, is_active=True)
+            role = Role.objects.get(name__iexact=value, is_active=True)
         except Role.DoesNotExist:
             raise ValidationError(f"Role '{value}' does not exist or is not active.")
-        return value
+        return role.name
 
     def validate_email(self, value):
         return value.strip().lower()
     
     def validate(self, data):
-        if not data.get('business_unit'):
-             raise serializers.ValidationError({"business_unit": "Business Unit cannot be empty."})
-        if not data.get('department'):
-             raise serializers.ValidationError({"department": "Department cannot be empty."})
+        request = self.context.get('request')
+        current_user = getattr(request, 'user', None)
+
+        for field in ['hq', 'business_unit', 'department', 'section', 'designation', 'factory', 'line', 'subline']:
+            if not data.get(field) and current_user and getattr(current_user, field, None):
+                data[field] = getattr(current_user, field)
+
+        if not data.get('employeeid'):
+            email_prefix = (data.get('email', '').split('@')[0] or 'EMP').upper()
+            email_prefix = ''.join(ch for ch in email_prefix if ch.isalnum())[:6] or 'EMP'
+            candidate_number = User.objects.count() + 1
+
+            while True:
+                generated_employeeid = f"{email_prefix}{candidate_number:04d}"[:10]
+                if not User.objects.filter(employeeid=generated_employeeid).exists():
+                    data['employeeid'] = generated_employeeid
+                    break
+                candidate_number += 1
         
         # Line/Subline Logic
         line = data.get('line')
@@ -3233,6 +3285,7 @@ class NotificationSerializer(serializers.ModelSerializer):
     level_name = serializers.SerializerMethodField()
     time_ago = serializers.SerializerMethodField()
     is_recent = serializers.SerializerMethodField()
+    notification_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
@@ -3242,7 +3295,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             'level', 'level_name', 'training_schedule', 'machine_allocation',
             'test_session', 'retraining_session', 'human_body_check_session',
             'is_read', 'is_sent', 'read_at', 'created_at', 'sent_at', 'metadata',
-            'priority', 'time_ago', 'is_recent'
+            'priority', 'time_ago', 'is_recent', 'notification_type_display'
         ]
         read_only_fields = ['id', 'created_at', 'sent_at', 'time_ago', 'is_recent']
 
@@ -3286,6 +3339,9 @@ class NotificationSerializer(serializers.ModelSerializer):
         from django.utils import timezone
         from datetime import timedelta
         return obj.created_at > timezone.now() - timedelta(hours=24)
+
+    def get_notification_type_display(self, obj):
+        return obj.get_notification_type_display()
 
 
 class NotificationCreateSerializer(serializers.ModelSerializer):

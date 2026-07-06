@@ -141,7 +141,7 @@ interface ExpandableSidePanelProps {
   isOpen: boolean;
   onClose: () => void;
   userRole: string;
-  user?: { role?: string; permissions?: Record<string, { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; approve?: boolean; export?: boolean; manage?: boolean }> } | null;
+  user?: { role?: string; userType?: string; permissions?: Record<string, { view?: boolean; create?: boolean; update?: boolean; delete?: boolean; approve?: boolean; export?: boolean; manage?: boolean }> } | null;
 }
 
 export const ExpandableSidePanel = ({ activeTab, isOpen, onClose, userRole, user }: ExpandableSidePanelProps) => {
@@ -178,7 +178,7 @@ export const ExpandableSidePanel = ({ activeTab, isOpen, onClose, userRole, user
       );
     }
 
-    const effectiveUser = user || { role: userRole };
+    const effectiveUser = user || { role: userRole, userType: userRole };
     let filtered = rawLinks.filter(link => {
       if (!link.tileId) {
         return false;

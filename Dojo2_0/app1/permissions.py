@@ -24,11 +24,18 @@ class RBACPermission(BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        module_slug = getattr(view, 'rbac_module', None)
+        action_name = getattr(view, 'action', None)
+        module_map = getattr(view, 'rbac_module_map', {})
+        module_slug = module_map.get(action_name, getattr(view, 'rbac_module', None))
+
         if not module_slug:
             return True
 
         action_map = dict(self.default_action_map)
         action_map.update(getattr(view, 'rbac_action_map', {}))
-        action = action_map.get(getattr(view, 'action', None), 'view')
+        action = action_map.get(action_name, 'view')
+
+        if isinstance(module_slug, (list, tuple, set)):
+            return any(user.has_module_permission(single_module, action) for single_module in module_slug)
+
         return user.has_module_permission(module_slug, action)

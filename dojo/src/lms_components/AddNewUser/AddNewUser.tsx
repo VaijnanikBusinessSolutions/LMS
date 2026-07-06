@@ -1,7 +1,9 @@
 
 
-import React, { useState, ChangeEvent } from 'react';
+import React, { useState, type ChangeEvent } from 'react';
 import { ChevronDown, User, Upload, Trash2, Mail, Phone, Briefcase, Lock, UserPlus, Camera } from 'lucide-react';
+import { API_ENDPOINTS } from '../../components/constants/api';
+import { normalizeListResponse } from '../../utils/api';
 
 interface FormData {
   firstName: string;
@@ -24,7 +26,21 @@ interface FormErrors {
   password?: string;
 }
 
+interface RoleOption {
+  id: number;
+  name: string;
+}
+
 const AddUserForm = () => {
+  const auth = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('auth') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const accessToken = auth?.accessToken || localStorage.getItem('access_token') || '';
+
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -33,7 +49,7 @@ const AddUserForm = () => {
     bio: '',
     username: '',
     password: '',
-    userType: 'employee',
+    userType: '',
     companyName: '',
   });
 
@@ -41,12 +57,33 @@ const AddUserForm = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
+  const [roleOptions, setRoleOptions] = React.useState<RoleOption[]>([]);
 
-  const userTypes = [
-    { value: 'admin', label: 'Admin' },
-    { value: 'team-leader', label: 'Team Leader' },
-    { value: 'employee', label: 'Employee' },
-  ];
+  React.useEffect(() => {
+    fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.ROLES}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        const roles = normalizeListResponse<RoleOption>(data).filter((role) => Boolean(role?.name));
+        setRoleOptions(roles);
+        if (roles[0]?.name) {
+          setFormData((prev) => ({
+            ...prev,
+            userType: prev.userType || roles[0].name,
+          }));
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load roles:', error);
+        setRoleOptions([]);
+      });
+  }, [accessToken]);
 
   const handleInputChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -114,24 +151,37 @@ const AddUserForm = () => {
     setLoading(true);
 
     const formDataToSend = new FormData();
-    formDataToSend.append('firstName', formData.firstName);
-    formDataToSend.append('lastName', formData.lastName);
-    formDataToSend.append('email', formData.email);
-    formDataToSend.append('phoneNumber', formData.phoneNumber);
-    formDataToSend.append('bio', formData.bio);
+    formDataToSend.append('first_name', formData.firstName.trim());
+    formDataToSend.append('last_name', formData.lastName.trim());
+    formDataToSend.append('email', formData.email.trim().toLowerCase());
+    formDataToSend.append('phone_number', formData.phoneNumber.trim());
+    formDataToSend.append('bio', formData.bio.trim());
     formDataToSend.append('password', formData.password);
-    formDataToSend.append('username', formData.username);
-    formDataToSend.append('userType', formData.userType);
-    formDataToSend.append('companyName', formData.companyName);
+    formDataToSend.append('role', formData.userType);
+    formDataToSend.append('business_unit', formData.companyName.trim());
     if (profileImage) {
-      formDataToSend.append('profileImage', profileImage);
+      formDataToSend.append('profile_image', profileImage);
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/users/', {
+      const response = await fetch('http://127.0.0.1:8000/users/', {
         method: 'POST',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         body: formDataToSend,
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage =
+          errorData?.message ||
+          errorData?.detail ||
+          JSON.stringify(errorData?.errors || errorData) ||
+          'Registration failed. Check your inputs.';
+        console.error('Registration Error:', errorData);
+        alert(errorMessage);
+        setLoading(false);
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -153,7 +203,7 @@ const AddUserForm = () => {
         bio: '',
         password: '',
         username: '',
-        userType: 'employee',
+        userType: roleOptions[0]?.name || '',
         companyName: '',
       });
       setProfileImage(null);
@@ -368,9 +418,9 @@ const AddUserForm = () => {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 bg-background border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none pr-10 cursor-pointer"
                   >
-                    {userTypes.map((type) => (
-                      <option key={type.value} value={type.value} className="bg-white">
-                        {type.label}
+                    {roleOptions.map((type) => (
+                      <option key={type.id} value={type.name} className="bg-white">
+                        {type.name}
                       </option>
                     ))}
                   </select>

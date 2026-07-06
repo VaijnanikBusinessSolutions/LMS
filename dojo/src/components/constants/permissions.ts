@@ -11,70 +11,15 @@ type ModuleAccess = {
 
 type AccessMap = Record<string, ModuleAccess>;
 
-type AppUser = { role?: string; permissions?: AccessMap } | null | undefined;
+type AppUser = { role?: string; userType?: string; permissions?: AccessMap } | null | undefined;
 
-const fallbackRolePermissions: Record<string, string[] | 'ALL'> = {
-  admin: 'ALL',
-  'team-leader': [
-    'lms-dashboard',
-    'courses',
-    'User Managements',
-    'notifications',
-    'observance-sheet',
-    'reports',
-    'level-curriculum',
-    'groups',
-  ],
-  employee: [
-    'lms-dashboard',
-    'courses',
-    'notifications',
-    'observance-sheet',
-    'reports',
-    'level-curriculum',
-    'groups',
-  ],
-};
+const isAdminLikeUser = (user: AppUser) => {
+  const normalizedRole = String(user?.role || user?.userType || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
 
-const fallbackLinkPermissions: Record<string, Record<string, string[]>> = {
-  admin: {
-    'lms-dashboard': ['Admin Dashboard', 'Team Leader Dashboard', 'User Dashboard'],
-    'courses': ['Courses', 'Create Course', 'Enrollments'],
-    'User Managements': ['Department Wise Training', 'Level Wise Sheet'],
-    'notifications': ['Notification', 'Approval List'],
-    'observance-sheet': ['Retraining', 'Level Assessment','Competency Dashboard'],
-    'reports': ['Course Reports', 'Employee Reports', 'Training Report', 'Certificate', 'Courses'],
-    'level-curriculum': ['Lesson Materials', 'Question Paper Settings','AI Chat Bot','AI Assistant'],
-    'process-dojo': ['User Id Registration', 'Department Wise Training'],
-    'planning': ['Schedule', 'Plan', 'Plan List','TNI'],
-    'analytics': ['Analytics Graph', 'Analytics Table'],
-    'master-employee': ['User Table', 'Employee History Card'],
-    'schedules': ['Multiskill Schedule', 'TNI'],
-    'skill-matrix': ['Skill Matrix'],
-    'ar-vr': ['AR/VR Experience', 'Animations'],
-    'settings': ['List', 'Core Configuration'],
-    'method': ['Method Settings','Hierarchy'],
-    'groups':['Groups','Group Creation'],
-  },
-  'team-leader': {
-    'lms-dashboard': ['Team Leader Dashboard'],
-    'courses': ['Courses', 'Enrolments'],
-    'User Managements': ['Department Wise Training', 'Level Wise Sheet'],
-    'notifications': ['Notification'],
-    'observance-sheet': ['Level Assessment'],
-    'reports': ['Course Reports', 'Training Report'],
-    'level-curriculum': ['Lesson Materials','AI Chat Bot','AI Assistant'],
-    'groups':['Groups','Group Creation'],
-  },
-  employee: {
-    'lms-dashboard': ['User Dashboard'],
-    'courses': ['Courses'],
-    'groups':['Groups'],
-    'notifications': ['Notification'],
-    'observance-sheet': ['Level Assessment'],
-    'reports': ['Certificate'],
-    'level-curriculum': ['Lesson Materials','AI Chat Bot','AI Assistant'],
-  },
+  return normalizedRole === 'admin' || normalizedRole === 'administrator';
 };
 
 const tileToModuleMap: Record<string, string | string[]> = {
@@ -87,6 +32,7 @@ const tileToModuleMap: Record<string, string | string[]> = {
   'reports': ['reports', 'course_reports', 'employee_reports', 'certificate'],
   'notifications': ['notifications', 'notifications_page'],
   'planning': ['planning', 'schedule', 'tni', 'multiskill_schedule', 'core_configuration'],
+  'schedules': ['planning', 'schedule', 'multiskill_schedule'],
   'method': ['method', 'method_settings', 'hierarchy'],
   'skill-matrix': ['skill_matrix'],
   'observance-sheet': ['assessments', 'level_assessment', 'competency_dashboard'],
@@ -134,25 +80,54 @@ const linkToModuleMap: Record<string, string | string[]> = {
 const normalizeModuleSlug = (moduleSlug: string) => moduleSlug.replace(/-/g, '_');
 
 const canUseAccess = (access?: ModuleAccess) =>
-  Boolean(access?.view || access?.manage || access?.create || access?.update);
+  Boolean(
+    access?.view ||
+      access?.create ||
+      access?.update ||
+      access?.delete ||
+      access?.approve ||
+      access?.export ||
+      access?.manage,
+  );
 
 export function hasModuleAccess(user: AppUser, moduleSlug: string) {
-  const roleName = String(user?.role || '').toLowerCase();
-  if (roleName === 'admin') {
+  if (isAdminLikeUser(user)) {
+    return true;
+  }
+
+  if (user && normalizeModuleSlug(moduleSlug) === 'employee_dashboard') {
     return true;
   }
 
   const normalizedSlug = normalizeModuleSlug(moduleSlug);
-  if (user?.permissions) {
-    return canUseAccess(user.permissions[normalizedSlug]);
+  const access = user?.permissions?.[normalizedSlug];
+  return canUseAccess(access);
+}
+
+export function hasModuleAction(
+  user: AppUser,
+  moduleSlug: string,
+  actions: Array<keyof ModuleAccess>,
+) {
+  if (isAdminLikeUser(user)) {
+    return true;
   }
-  if (normalizedSlug === 'team_leader_dashboard') {
-    return roleName === 'team-leader';
+  const normalizedSlug = normalizeModuleSlug(moduleSlug);
+  const access = user?.permissions?.[normalizedSlug];
+
+  if (access) {
+    return actions.some((action) => Boolean(access[action]));
   }
-  if (normalizedSlug === 'employee_dashboard') {
-    return roleName === 'employee';
-  }
+
   return false;
+}
+
+export function hasAnyModuleAction(
+  user: AppUser,
+  moduleSlugs: string[],
+  actions: Array<keyof ModuleAccess>,
+) {
+  return moduleSlugs.some((moduleSlug) => hasModuleAction(user, moduleSlug, actions));
 }
 
 export function hasAnyModuleAccess(user: AppUser, moduleSlugs: string[]) {
@@ -173,28 +148,23 @@ export function resolveDashboardRoute(user: AppUser) {
 }
 
 export function resolveDefaultLandingPath(user: AppUser) {
-  return resolveDashboardRoute(user);
+  return '/home';
 }
 
-export const rolePermissions = fallbackRolePermissions;
-export const linkPermissions = fallbackLinkPermissions;
+export const rolePermissions: Record<string, never> = {};
+export const linkPermissions: Record<string, never> = {};
 
 export function canAccessTile(user: AppUser, tileId: string) {
   const moduleSlug = tileToModuleMap[tileId];
   if (Array.isArray(moduleSlug)) {
-    if (user?.permissions) {
-      return hasAnyModuleAccess(user, moduleSlug);
-    }
-  } else if (user?.permissions && moduleSlug && user.permissions[normalizeModuleSlug(moduleSlug)]) {
-    const access = user.permissions[normalizeModuleSlug(moduleSlug)];
-    return canUseAccess(access);
+    return hasAnyModuleAccess(user, moduleSlug);
   }
 
-  const fallback = user?.role ? fallbackRolePermissions[user.role] : undefined;
-  if (fallback === 'ALL') {
-    return true;
+  if (!moduleSlug) {
+    return false;
   }
-  return Array.isArray(fallback) ? fallback.includes(tileId) : false;
+
+  return hasModuleAccess(user, moduleSlug);
 }
 
 export function getAllowedLinksForTile<T extends { name: string }>(
@@ -202,21 +172,14 @@ export function getAllowedLinksForTile<T extends { name: string }>(
   tileId: string,
   links: T[],
 ): T[] {
-  if (user?.permissions) {
-    return links.filter((link) => {
-      const linkedModule = linkToModuleMap[link.name];
-      if (linkedModule) {
-        return Array.isArray(linkedModule)
-          ? hasAnyModuleAccess(user, linkedModule)
-          : hasModuleAccess(user, linkedModule);
-      }
-      return canAccessTile(user, tileId);
-    });
-  }
+  return links.filter((link) => {
+    const linkedModule = linkToModuleMap[link.name];
+    if (linkedModule) {
+      return Array.isArray(linkedModule)
+        ? hasAnyModuleAccess(user, linkedModule)
+        : hasModuleAccess(user, linkedModule);
+    }
 
-  const fallback = user?.role ? fallbackLinkPermissions[user.role]?.[tileId] : undefined;
-  if (!fallback) {
-    return [];
-  }
-  return links.filter((link) => fallback.includes(link.name));
+    return canAccessTile(user, tileId);
+  });
 }

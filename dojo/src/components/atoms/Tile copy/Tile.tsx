@@ -64,7 +64,7 @@ const TileNew: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled 
   const filteredLinks = useMemo(() => {
     if (userRole && tileId) {
       const auth = JSON.parse(localStorage.getItem('auth') || '{}');
-      const effectiveUser = auth?.user || { role: userRole };
+      const effectiveUser = auth?.user || { role: userRole, userType: userRole };
       return getAllowedLinksForTile(effectiveUser, tileId, links || []);
     }
     return links || [];
@@ -154,7 +154,7 @@ const TileNew: React.FC<TileProps> = ({ title, links = [], icon: Icon, disabled 
                       ? 'bg-slate-100 text-slate-400' 
                       : 'bg-indigo-900 dark:bg-gray-300 text-white dark:text-black shadow-sm'}
                   `}>
-                    {getLinkIcon(link.name)}
+                    {link.icon ? <link.icon size={18} /> : getLinkIcon(link.name)}
                   </div>
 
                   <div className="relative flex-1 min-w-0">

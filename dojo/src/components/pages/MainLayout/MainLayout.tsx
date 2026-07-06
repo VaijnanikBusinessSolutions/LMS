@@ -342,7 +342,7 @@ const MainLayout = () => {
                         activeTab={activeTab}
                         isOpen={isPanelOpen}
                         onClose={() => setIsPanelOpen(false)}
-                        userRole={user?.role || 'employee'}
+                        userRole={user?.role || user?.userType || ''}
                         user={user}
                     />
                 ) : (
@@ -350,7 +350,7 @@ const MainLayout = () => {
                         activeTab={activeTab}
                         isOpen={isPanelOpen}
                         onClose={() => setIsPanelOpen(false)}
-                        userRole={user?.role || 'employee'}
+                        userRole={user?.role || user?.userType || ''}
                         user={user}
                     />
                 )}

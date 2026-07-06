@@ -312,8 +312,8 @@ export const tiles: TileData[] = [
     title: 'Level Assessment',
     links: [
       // { name: 'Retraining', path: '/retraining', icon: RefreshCw },
-      { name: 'Level Assessment', path: '/CompetencySystem', icon: UserRoundCog },
-      { name: 'Competency Dashboard', path: '/CompetencyDashboard', icon: UserRoundCog },
+      { name: 'Level Assessment', path: '/CompetencySystem', icon: ClipboardCheck },
+      { name: 'Competency Dashboard', path: '/CompetencyDashboard', icon: BarChart3 },
 
     ],
     icon: FileCheck2, // UNIQUE parent icon (instead of FileText again)

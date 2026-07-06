@@ -101,7 +101,6 @@ import EditGroupPage from "./lms_components/StudentGroupsPage/EditGroupPage/Edit
 import AddUserForm from "./lms_components/AddNewUser/AddNewUser";
 import UserTable from "./lms_components/userpage";
 import EmployeeList from "./lms_components/Report/Report";
-import EmployeeCourseTable from "./lms_components/CourseReport/CourseReport";
 import NotificationPage from "./lms_components/NotificationPage/NotificationPage";
 import CourseDetail from "./lms_components/CourseDetail/CourseDetail";
 import CourseLessonPage from "./lms_components/CourseLessonPage/CourseLessonPage";
@@ -151,6 +150,30 @@ function App() {
     if (isAuthenticated && accessToken) {
       dispatch(refreshCurrentUser() as any);
     }
+  }, [dispatch, isAuthenticated, accessToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !accessToken) {
+      return;
+    }
+
+    const refreshPermissions = () => {
+      dispatch(refreshCurrentUser() as any);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshPermissions();
+      }
+    };
+
+    window.addEventListener("focus", refreshPermissions);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshPermissions);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [dispatch, isAuthenticated, accessToken]);
 
   return (
@@ -541,7 +564,21 @@ function App() {
 
               {/* A. ADMIN ONLY ROUTES */}
               {/* ONLY Admins can see these. Employees cannot access these. */}
-              <Route element={<RoleBasedRoute allowedRoles={["admin"]} />}>
+              <Route
+                element={
+                  <RoleBasedRoute
+                    allowedModules={[
+                      "admin_dashboard",
+                      "reports",
+                      "course_reports",
+                      "notifications",
+                      "user_table",
+                      "users",
+                      "method_settings",
+                    ]}
+                  />
+                }
+              >
                 <Route
                   path="/lms/growth/compare/:courseId"
                   element={<GrowthReportPage />}
@@ -597,7 +634,14 @@ function App() {
               {/* Admin can see these. Team Leader can see these. Employee CANNOT. */}
               <Route
                 element={
-                  <RoleBasedRoute allowedRoles={["admin", "team-leader"]} />
+                  <RoleBasedRoute
+                    allowedModules={[
+                      "team_leader_dashboard",
+                      "planning",
+                      "schedule",
+                      "reports",
+                    ]}
+                  />
                 }
               >
                 <Route path="/Management" element={<Management />} />
@@ -644,9 +688,7 @@ function App() {
               {/* Everyone is allowed here. Admin sees this. Employee sees only this. */}
               <Route
                 element={
-                  <RoleBasedRoute
-                    allowedRoles={["admin", "team-leader", "employee"]}
-                  />
+                  <RoleBasedRoute allowedModules={["employee_dashboard"]} />
                 }
               >
                 {/* Dashboards */}
@@ -761,9 +803,7 @@ function App() {
             {/* Accessible to everyone for taking tests */}
             <Route
               element={
-                <RoleBasedRoute
-                  allowedRoles={["admin", "team-leader", "employee"]}
-                />
+                <RoleBasedRoute allowedModules={["employee_dashboard"]} />
               }
             >
               <Route path="/remote" element={<RemoteQuiz />} />

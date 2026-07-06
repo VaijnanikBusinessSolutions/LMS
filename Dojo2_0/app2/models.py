@@ -13,19 +13,13 @@ class LMSProfile(models.Model):
         related_name='lms_profile'
     )
 
-    ROLE_CHOICES = [
-        ('admin', 'Admin'),
-        ('team-leader', 'Team Leader'),
-        ('employee', 'Employee'),
-    ]
-
     # We keep these fields so your LMS Frontend doesn't break
     firstName = models.CharField(max_length=100)
     lastName = models.CharField(max_length=100)
     phoneNumber = models.CharField(max_length=15, blank=True, null=True)
     
-    # We keep userType here. You can select it manually or auto-set it later.
-    userType = models.CharField(max_length=30, choices=ROLE_CHOICES, default='Employee')
+    # Kept for frontend compatibility, but now mirrors the assigned RBAC role.
+    userType = models.CharField(max_length=50, blank=True, default='')
     designation = models.CharField(max_length=100, blank=True, null=True, default='Employee')
     department = models.CharField(max_length=100, blank=True, null=True, default='General')
     hq = models.CharField(max_length=100, blank=True, null=True, default='hq')

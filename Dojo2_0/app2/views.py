@@ -37,7 +37,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from shapely import buffer
 from sympy import content
-from app1.models import Role 
+from app1.rbac import build_permission_codename
 from .models import Course, GeneratedMedia, Lesson, LessonVideo, Notification, CourseAssignment
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -129,19 +129,25 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def admin(self, request):
-        admin_profiles = self.get_queryset().filter(userType=Role.ADMIN)
+        admin_profiles = self.get_queryset().filter(
+            user__role__permissions__codename=build_permission_codename('admin_dashboard', 'view')
+        ).distinct()
         serializer = self.get_serializer(admin_profiles, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def team_leaders(self, request):
-        tl_profiles = self.get_queryset().filter(userType=Role.TEAM_LEADER)
+        tl_profiles = self.get_queryset().filter(
+            user__role__permissions__codename=build_permission_codename('team_leader_dashboard', 'view')
+        ).distinct()
         serializer = self.get_serializer(tl_profiles, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def employees(self, request):
-        emp_profiles = self.get_queryset().filter(userType=Role.EMPLOYEE)
+        emp_profiles = self.get_queryset().filter(
+            user__role__permissions__codename=build_permission_codename('employee_dashboard', 'view')
+        ).distinct()
         serializer = self.get_serializer(emp_profiles, many=True)
         return Response(serializer.data)
 
@@ -1378,7 +1384,7 @@ class AdminGrowthReportListView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         employees_with_reports = User.objects.filter(
-            role__name=Role.EMPLOYEE 
+            role__permissions__codename=build_permission_codename('employee_dashboard', 'view')
         ).prefetch_related(
             Prefetch( 
                 'employeegrowthreport_set',
@@ -1603,12 +1609,22 @@ class CourseReportStatsView(APIView):
 
     def get(self, request):
         user = request.user
+        user_role = getattr(getattr(user, 'role', None), 'name', None)
         
         # 2. Start with All Courses
         courses_qs = Course.objects.all().order_by('-created')
 
-        if not user.has_module_permission('reports', 'manage'):
-            if not user.has_module_permission('reports', 'view'):
+        can_manage_reports = (
+            user.has_module_permission('course_reports', 'manage') or
+            user.has_module_permission('reports', 'manage')
+        )
+        can_view_reports = (
+            user.has_module_permission('course_reports', 'view') or
+            user.has_module_permission('reports', 'view')
+        )
+
+        if not can_manage_reports:
+            if not can_view_reports:
                 return Response({"error": "Unauthorized"}, status=403)
 
             if has_team_scope(user, 'courses') or has_team_scope(user, 'groups'):

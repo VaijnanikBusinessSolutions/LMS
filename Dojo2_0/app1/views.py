@@ -92,22 +92,35 @@ class LoginAPIView(APIView):
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
 
-        # Build user payload safely (use getattr with defaults)
+        try:
+            user_type = user.get_lms_user_type()
+        except Exception:
+            user_type = getattr(getattr(user, 'role', None), 'name', None) or ''
+
+        try:
+            permissions = user.get_accessible_modules()
+        except Exception:
+            permissions = {}
+
+        # Build user payload from JSON-safe primitives only.
         user_payload = {
             'id': user.id,
             'email': getattr(user, 'email', None),
             'first_name': getattr(user, 'first_name', None),
             'last_name': getattr(user, 'last_name', None),
             'employeeid': getattr(user, 'employeeid', None),
-            # Prefer returning primitive values (ids or names) for related objects:
             'role': getattr(getattr(user, 'role', None), 'name', None),
-            'userType': user.get_lms_user_type(),
-            'hq': getattr(getattr(user, 'hq', None), 'name', getattr(user, 'hq', None)),
-            'factory': getattr(getattr(user, 'factory', None), 'name', getattr(user, 'factory', None)),
-            'department': getattr(getattr(user, 'department', None), 'name', getattr(user, 'department', None)),
+            'userType': user_type,
+            'hq': getattr(user, 'hq', None),
+            'factory': getattr(user, 'factory', None),
+            'department': getattr(user, 'department', None),
+            'line': getattr(user, 'line', None),
+            'subline': getattr(user, 'subline', None),
             'status': getattr(user, 'status', None),
-            'designation': getattr(getattr(user, 'designation', None), 'name', getattr(user, 'designation', None)),
-            'permissions': user.get_accessible_modules(),
+            'designation': getattr(user, 'designation', None),
+            'business_unit': getattr(user, 'business_unit', None),
+            'section': getattr(user, 'section', None),
+            'permissions': permissions,
         }
 
         return Response({
@@ -209,7 +222,7 @@ class BulkEmployeeView(APIView):
         data = {
             'first_name': ['John'], 'last_name': ['Doe'], 
             'email': ['john@example.com'], 'employeeid': ['EMP001'],
-            'role': ['employee'], 'password': ['Pass@123'],
+            'role': [Role.objects.filter(is_active=True).order_by('name').values_list('name', flat=True).first() or ''], 'password': ['Pass@123'],
             'business_unit': ['Unit A'], 'department': ['Dept B'],
             'designation': ['Operator'], 'section': ['Section C']
         }
@@ -291,6 +304,15 @@ class UserViewSet(viewsets.ModelViewSet):
     pagination_class = LargeResultsSetPagination
     permission_classes = [IsAuthenticated, RBACPermission]
     rbac_module = 'users'
+    rbac_module_map = {
+        'list': ['user_table', 'users'],
+        'retrieve': ['user_table', 'users'],
+        'me': ['user_table', 'users'],
+        'create': ['user_creation', 'users'],
+        'update': ['user_table', 'users'],
+        'partial_update': ['user_table', 'users'],
+        'destroy': ['user_table', 'users'],
+    }
     rbac_action_map = {'me': 'view'}
 
     def get_serializer_class(self):
@@ -9485,7 +9507,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     pagination_class = LargeResultsSetPagination
 
     def get_queryset(self):
-        return Notification.objects.all().select_related(
+        base_queryset = Notification.inbox_for_user(self.request.user)
+        return base_queryset.select_related(
             'recipient', 'employee', 'level', 'training_schedule',
             'machine_allocation', 'test_session', 'retraining_session',
             'human_body_check_session'

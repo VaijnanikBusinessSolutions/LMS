@@ -10,11 +10,6 @@ interface RoleBasedRouteProps {
   allowedModules?: string[];
 }
 
-const BUILT_IN_ROLES = ['admin', 'team-leader', 'employee'] as const;
-
-const isCustomRole = (role: string) =>
-  !BUILT_IN_ROLES.includes(role as (typeof BUILT_IN_ROLES)[number]);
-
 const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
   allowedRoles = [],
   allowedModules = [],
@@ -31,11 +26,7 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  const roleName = String(user.role || '');
-  const allowsGeneralAccess =
-    allowedRoles.includes('admin') &&
-    allowedRoles.includes('team-leader') &&
-    allowedRoles.includes('employee');
+  const roleName = String(user.role || user.userType || '');
   const hasModuleMatch =
     allowedModules.length > 0 && hasAnyModuleAccess(user, allowedModules);
 
@@ -45,10 +36,6 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
 
   // 2. If User's role is NOT in the allowed list for this specific route
   if (!allowedRoles.includes(roleName as UserRole)) {
-    if (isCustomRole(roleName) && allowsGeneralAccess) {
-      return <Outlet />;
-    }
-
     return <Navigate to={resolveDefaultLandingPath(user)} replace />;
   }
 

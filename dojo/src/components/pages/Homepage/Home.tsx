@@ -609,8 +609,8 @@ export const HomePage = () => {
   }, []);
 
   const auth = JSON.parse(localStorage.getItem('auth') || '{}');
-  const user = auth?.user || {};
-  const userRole = user?.role || 'employee';
+  const user = auth?.user || null;
+  const userRole = user?.role || user?.userType || '';
   const JOURNEY_ORDER = ['lms-dashboard', 'process-dojo', 'courses', 'department-training', 'groups'];
 
   const getQuickLinkTileId = (linkName: string, currentTab: TabId) => {
@@ -643,7 +643,11 @@ export const HomePage = () => {
     const allTiles = getTilesByTab(activeTab);
     return allTiles
       .filter(tile => {
-        return canAccessTile(user, tile.id);
+        if (!canAccessTile(user, tile.id)) {
+          return false;
+        }
+
+        return getAllowedLinksForTile(user, tile.id, tile.links || []).length > 0;
       })
       .sort((a, b) => {
         const indexA = JOURNEY_ORDER.indexOf(a.id);
@@ -668,6 +672,8 @@ export const HomePage = () => {
       return getAllowedLinksForTile(user, tileId, [link]).length > 0;
     });
   }, [activeTab, user]);
+
+  const hasVisibleHomeContent = filteredTiles.length > 0 || visibleQuickLinks.length > 0;
 
   return (
     <motion.div
@@ -835,10 +841,16 @@ export const HomePage = () => {
             </motion.div>
           ) : (
             <motion.div key="journey-grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full">
-              {designMode === 'modern' ? (
-                <TilesGridNew tiles={filteredTiles} userRole={userRole} />
+              {hasVisibleHomeContent ? (
+                designMode === 'modern' ? (
+                  <TilesGridNew tiles={filteredTiles} userRole={userRole} />
+                ) : (
+                  <TilesGrid tiles={filteredTiles} userRole={userRole} />
+                )
               ) : (
-                <TilesGrid tiles={filteredTiles} userRole={userRole} />
+                <div className="rounded-[24px] border border-slate-200 bg-white/80 px-6 py-10 text-center text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+                  No modules are available for this account yet. Please contact the administrator to assign access.
+                </div>
               )}
             </motion.div>
           )}

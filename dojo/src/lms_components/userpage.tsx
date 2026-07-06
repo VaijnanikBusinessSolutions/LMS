@@ -1,12 +1,13 @@
 import React, { useState, useEffect, type ChangeEvent } from "react";
 import { 
-  ChevronDown, User, Upload, Trash2, Mail, Phone, Briefcase, Lock, 
+  ChevronDown, User, Trash2, Mail, Phone, Briefcase, Lock, 
   UserPlus, Camera, X, ShieldCheck, BadgeCheck, Building2, FileText,
-  Sparkles, Users, Search, Filter, MoreHorizontal, Eye, Edit2, AlertCircle,
+  Sparkles, Users, Search, MoreHorizontal, Edit2, AlertCircle,
   CheckCircle2, XCircle, ChevronLeft, ChevronRight, LayoutGrid, List,
-  SlidersHorizontal, RefreshCw, Download, ArrowUpDown, TrendingUp, Clock, Zap
+  SlidersHorizontal, RefreshCw, Download, ArrowUpDown, TrendingUp, Zap
 } from 'lucide-react';
 import { normalizeListResponse } from "../utils/api";
+import { API_ENDPOINTS } from "../components/constants/api";
 
 interface User {
   id: number;
@@ -46,21 +47,36 @@ interface FormErrors {
   password?: string;
 }
 
+interface RoleOption {
+  id: number;
+  name: string;
+}
+
 const UserTable: React.FC = () => {
+  const auth = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('auth') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const accessToken = auth?.accessToken || localStorage.getItem('access_token') || '';
+
   const [users, setUsers] = useState<User[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
-  const [sortField, setSortField] = useState<string>('firstName');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [formData, setFormData] = useState<FormData>({
     firstName: '',
     lastName: '',
@@ -69,7 +85,7 @@ const UserTable: React.FC = () => {
     bio: '',
     username: '',
     password: '',
-    userType: 'employee',
+    userType: '',
     companyName: '',
   });
 
@@ -78,27 +94,55 @@ const UserTable: React.FC = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const userTypes = [
-    { value: 'admin', label: 'Admin', color: 'from-purple-500 to-pink-500', icon: ShieldCheck },
-    { value: 'team-leader', label: 'Team Leader', color: 'from-blue-500 to-cyan-500', icon: Users },
-    { value: 'employee', label: 'Employee', color: 'from-emerald-500 to-teal-500', icon: Briefcase },
-    { value: 'user', label: 'User', color: 'from-gray-500 to-slate-500', icon: User },
-  ];
-
   useEffect(() => {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.ROLES}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        const roles = normalizeListResponse<RoleOption>(data).filter((role) => Boolean(role?.name));
+        setRoleOptions(roles);
+        setFormData((prev) => ({
+          ...prev,
+          userType: prev.userType || roles[0]?.name || '',
+        }));
+      })
+      .catch((error) => {
+        console.error("Error fetching roles:", error);
+        setRoleOptions([]);
+      });
+  }, [accessToken]);
+
   const fetchUsers = () => {
     setLoading(true);
-    fetch("http://127.0.0.1:8000/lms/users/")
-      .then((response) => response.json())
+    setLoadError('');
+    fetch("http://127.0.0.1:8000/users/", {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `HTTP ${response.status}`);
+        }
+        return response.json();
+      })
       .then((data) => {
         setUsers(normalizeListResponse<User>(data));
         setLoading(false);
       })
       .catch((error) => {
         console.error("Error fetching users:", error);
+        setLoadError('Unable to load users. Please check your permissions or sign in again.');
+        setUsers([]);
         setLoading(false);
       });
   };
@@ -109,7 +153,7 @@ const UserTable: React.FC = () => {
     setIsModalOpen(false);
     setFormData({
       firstName: '', lastName: '', email: '', phoneNumber: '',
-      bio: '', username: '', password: '', userType: 'employee', companyName: '',
+      bio: '', username: '', password: '', userType: roleOptions[0]?.name || '', companyName: '',
     });
     setProfileImage(null);
     setImagePreview(null);
@@ -156,14 +200,34 @@ const UserTable: React.FC = () => {
     setSubmitting(true);
 
     const formDataToSend = new FormData();
-    Object.entries(formData).forEach(([key, value]) => formDataToSend.append(key, value));
-    if (profileImage) formDataToSend.append('profileImage', profileImage);
+    formDataToSend.append('first_name', formData.firstName.trim());
+    formDataToSend.append('last_name', formData.lastName.trim());
+    formDataToSend.append('email', formData.email.trim().toLowerCase());
+    formDataToSend.append('password', formData.password);
+    formDataToSend.append('role', formData.userType);
+    formDataToSend.append('phone_number', formData.phoneNumber.trim());
+    formDataToSend.append('business_unit', formData.companyName.trim());
+    formDataToSend.append('bio', formData.bio.trim());
+    if (profileImage) formDataToSend.append('profile_image', profileImage);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/lms/users/', {
+      const response = await fetch('http://127.0.0.1:8000/users/', {
         method: 'POST',
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         body: formDataToSend,
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage =
+          errorData?.message ||
+          errorData?.detail ||
+          JSON.stringify(errorData?.errors || errorData) ||
+          'Registration failed.';
+        console.error('User creation failed:', errorData);
+        alert(errorMessage);
+        return;
+      }
 
       if (response.ok) {
         alert('✅ User created successfully!');
@@ -189,8 +253,8 @@ const UserTable: React.FC = () => {
     .filter(user => filterStatus === 'all' || (filterStatus === 'active' ? user.is_active : !user.is_active))
     .filter(user => filterDepartment === 'all' || user.department === filterDepartment)
     .sort((a, b) => {
-      const aVal = a[sortField as keyof User] || '';
-      const bVal = b[sortField as keyof User] || '';
+      const aVal = a.firstName || '';
+      const bVal = b.firstName || '';
       if (sortDirection === 'asc') {
         return String(aVal).localeCompare(String(bVal));
       }
@@ -252,6 +316,12 @@ const UserTable: React.FC = () => {
       </div>
 
       <div className="relative z-10 p-4 lg:p-6 space-y-6">
+        {loadError && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+            {loadError}
+          </div>
+        )}
+
         {/* Header Section */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="flex items-center gap-4">
@@ -297,8 +367,8 @@ const UserTable: React.FC = () => {
           {[
             { label: 'Total Users', value: users.length, icon: Users, gradient: 'from-blue-500 to-cyan-500', bg: 'from-blue-50 to-cyan-50 dark:from-blue-950/50 dark:to-cyan-950/50', trend: '+12%', trendUp: true },
             { label: 'Active Now', value: users.filter(u => u.is_active).length, icon: Zap, gradient: 'from-emerald-500 to-green-500', bg: 'from-emerald-50 to-green-50 dark:from-emerald-950/50 dark:to-green-950/50', trend: '+8%', trendUp: true },
-            { label: 'Administrators', value: users.filter(u => u.userType === 'admin').length, icon: ShieldCheck, gradient: 'from-purple-500 to-pink-500', bg: 'from-purple-50 to-pink-50 dark:from-purple-950/50 dark:to-pink-950/50', trend: '0%', trendUp: null },
-            { label: 'Team Leaders', value: users.filter(u => u.userType === 'team-leader').length, icon: TrendingUp, gradient: 'from-amber-500 to-orange-500', bg: 'from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/50', trend: '+3%', trendUp: true },
+            { label: 'Active Roles', value: new Set(users.map(u => u.userType).filter(Boolean)).size, icon: ShieldCheck, gradient: 'from-purple-500 to-pink-500', bg: 'from-purple-50 to-pink-50 dark:from-purple-950/50 dark:to-pink-950/50', trend: 'Live', trendUp: null },
+            { label: 'Departments', value: departments.length, icon: TrendingUp, gradient: 'from-amber-500 to-orange-500', bg: 'from-amber-50 to-orange-50 dark:from-amber-950/50 dark:to-orange-950/50', trend: 'Live', trendUp: null },
           ].map((stat, i) => (
             <div 
               key={i} 
@@ -392,8 +462,8 @@ const UserTable: React.FC = () => {
                     className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-800 dark:text-white appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all"
                   >
                     <option value="all">All Roles</option>
-                    {userTypes.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
+                    {roleOptions.map(type => (
+                      <option key={type.id} value={type.name}>{type.name}</option>
                     ))}
                   </select>
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
@@ -518,7 +588,7 @@ const UserTable: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                  {paginatedUsers.map((user, index) => (
+                  {paginatedUsers.map((user) => (
                     <tr 
                       key={user.id} 
                       className={`group hover:bg-gradient-to-r hover:from-indigo-50/50 hover:to-purple-50/30 dark:hover:from-indigo-950/30 dark:hover:to-purple-950/20 transition-all duration-300 ${selectedUsers.includes(user.id) ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : ''}`}
@@ -671,7 +741,7 @@ const UserTable: React.FC = () => {
         ) : (
           /* Grid View */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {paginatedUsers.map((user, index) => (
+            {paginatedUsers.map((user) => (
               <div 
                 key={user.id} 
                 className="group bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-gray-200/50 dark:border-slate-700/50 rounded-2xl p-5 hover:shadow-xl hover:shadow-indigo-100/50 dark:hover:shadow-none hover:-translate-y-1 transition-all duration-300"
@@ -810,22 +880,22 @@ const UserTable: React.FC = () => {
               <div className="space-y-3">
                 <label className="text-sm font-semibold text-gray-700 dark:text-slate-300">Select Role</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {userTypes.map((type) => (
+                  {roleOptions.map((type) => (
                     <button
-                      key={type.value}
-                      onClick={() => setFormData(prev => ({ ...prev, userType: type.value }))}
-                      className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${formData.userType === type.value ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'}`}
+                      key={type.id}
+                      onClick={() => setFormData(prev => ({ ...prev, userType: type.name }))}
+                      className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${formData.userType === type.name ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'}`}
                     >
-                      {formData.userType === type.value && (
+                      {formData.userType === type.name && (
                         <div className="absolute top-2 right-2">
                           <CheckCircle2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                         </div>
                       )}
-                      <div className={`p-2.5 bg-gradient-to-br ${type.color} rounded-xl`}>
-                        <type.icon className="w-5 h-5 text-white" />
+                      <div className="p-2.5 bg-gradient-to-br from-slate-600 to-slate-800 rounded-xl">
+                        <Briefcase className="w-5 h-5 text-white" />
                       </div>
-                      <span className={`text-xs font-semibold ${formData.userType === type.value ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-slate-300'}`}>
-                        {type.label}
+                      <span className={`text-xs font-semibold ${formData.userType === type.name ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-slate-300'}`}>
+                        {type.name}
                       </span>
                     </button>
                   ))}
