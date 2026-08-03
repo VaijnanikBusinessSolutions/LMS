@@ -17,7 +17,10 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
   const { user, isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
 
-  if (loading) {
+  // Keep already-authorized pages mounted during background auth refreshes.
+  // Opening a file picker causes a window focus event, which can otherwise
+  // unmount the course editor and reset it back to the course list.
+  if (loading && (!isAuthenticated || !user)) {
     return <div className="p-4 text-center">Checking permissions...</div>;
   }
 
@@ -32,6 +35,19 @@ const RoleBasedRoute: React.FC<RoleBasedRouteProps> = ({
 
   if (hasModuleMatch) {
     return <Outlet />;
+  }
+
+  if (allowedModules.length > 0 && allowedRoles.length === 0) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
+        <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Access unavailable</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Your account does not currently have permission to open this page.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // 2. If User's role is NOT in the allowed list for this specific route

@@ -29,10 +29,10 @@ interface CourseContentSectionProps {
   onCancelEdit?: () => void;
   onDeleteLesson?: () => void;
   onUpdateLesson?: (field: keyof Lesson, value: any) => void;
-  onVideoUpload?: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onVideoRemove?: () => void;
-  onAddAttachment?: (lessonId: number, file: File | null, url: string) => void;
-  onRemoveAttachment?: (lessonId: number, index: number) => void;
+  onVideoUpload?: (files: FileList | File[]) => void;
+  onVideoRemove?: (index?: number) => void;
+  onAddAttachment?: (lessonId: number, file: File | null, url: string, title?: string) => void;
+  onRemoveAttachment?: (lessonId: number, index: number) => void | Promise<boolean>;
   tests?: Test[];
   selectedTest?: number | null;
   editingTest?: number | null;
@@ -47,7 +47,7 @@ interface CourseContentSectionProps {
   onReorder?: (items: any[]) => void;
   onDuplicateLesson?: (lessonId: number) => void;
   onDuplicateTest?: (testId: number) => void;
-  onSave?: () => Promise<void>;
+  onSave?: () => Promise<boolean>;
   hasUnsavedChanges?: boolean;
 }
 
@@ -557,7 +557,7 @@ const SidebarItem: React.FC<{
         <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 ${
           isSelected ? 'border-indigo-500' : 'border-white dark:border-slate-900'
         } ${
-          (item.type === 'lesson' && (item as Lesson).video_url) || (item.type === 'test' && (item as Test).questions?.length > 0)
+          (item.type === 'lesson' && ((item as Lesson).videos?.length > 0 || Boolean((item as Lesson).content))) || (item.type === 'test' && (item as Test).questions?.length > 0)
             ? 'bg-emerald-500'
             : 'bg-slate-300 dark:bg-slate-600'
         }`} />
@@ -739,7 +739,7 @@ export const CourseContentSection: React.FC<CourseContentSectionProps> = ({
         if (editingLesson !== null) {
           onSaveLesson?.();
           showToast('Lesson saved successfully', 'success');
-        } else if (editingTest !== null) {
+        } else if (typeof editingTest === 'number') {
           onSaveTest?.(editingTest);
           showToast('Test saved successfully', 'success');
         }
@@ -817,7 +817,7 @@ export const CourseContentSection: React.FC<CourseContentSectionProps> = ({
   // Calculate progress
   const progress = useMemo(() => {
     const total = course.roadmap.length + tests.length;
-    const completed = course.roadmap.filter(l => l.video_url || l.content).length + tests.filter(t => t.questions?.length > 0).length;
+    const completed = course.roadmap.filter(l => (l.videos?.length || 0) > 0 || Boolean(l.content)).length + tests.filter(t => t.questions?.length > 0).length;
     return total > 0 ? Math.round((completed / total) * 100) : 0;
   }, [course.roadmap, tests]);
 
@@ -841,7 +841,7 @@ export const CourseContentSection: React.FC<CourseContentSectionProps> = ({
       await onSave();
     } else if (editingLesson !== null) {
       onSaveLesson?.();
-    } else if (editingTest !== null) {
+    } else if (typeof editingTest === 'number') {
       onSaveTest?.(editingTest);
     }
   };
@@ -1156,12 +1156,13 @@ export const CourseContentSection: React.FC<CourseContentSectionProps> = ({
                 onLessonTabChange={onLessonTabChange}
                 onEdit={onEditLesson!} 
                 onSave={onSaveLesson!} 
+                onSaveCourse={onSave}
                 onCancel={onCancelEdit!} 
                 onDelete={() => setDeleteModal({ isOpen: true, type: 'lesson', id: currentLesson.id, title: currentLesson.title })}
                 onUpdateLesson={onUpdateLesson!}
                 onVideoUpload={onVideoUpload!}
                 onVideoRemove={onVideoRemove!}
-                onAddAttachment={(f, u) => onAddAttachment?.(currentLesson!.id, f, u)}
+                onAddAttachment={(f, u, title) => onAddAttachment?.(currentLesson!.id, f, u, title)}
                 onRemoveAttachment={(i) => onRemoveAttachment?.(currentLesson!.id, i)}
               />
             </div>

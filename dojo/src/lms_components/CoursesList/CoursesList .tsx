@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, BookOpen, Calendar, Users, Loader2, AlertCircle, ChevronRight,
   Trash2, Search, Clock, Building2, LayoutGrid, List, Filter, X,
@@ -557,11 +558,16 @@ const Pagination: React.FC<{
 
 // --- MAIN COMPONENT ---
 const CourseList = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isEditorRoute = searchParams.get('editor') === '1';
+  const courseIdFromUrl = Number(searchParams.get('courseId'));
+  const initialCourseId = Number.isFinite(courseIdFromUrl) && courseIdFromUrl > 0 ? courseIdFromUrl : null;
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
-  const [showManager, setShowManager] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(initialCourseId);
+  const [showManager, setShowManager] = useState(isEditorRoute);
   
   // =====================================================
   // FIX: Search is now purely client-side (instant filtering)
@@ -620,6 +626,11 @@ const CourseList = () => {
   useEffect(() => {
     fetchAllCourses();
   }, [fetchAllCourses]);
+
+  useEffect(() => {
+    setShowManager(isEditorRoute);
+    setSelectedCourseId(isEditorRoute ? initialCourseId : null);
+  }, [isEditorRoute, initialCourseId]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -715,11 +726,13 @@ const CourseList = () => {
   const handleCreateNewCourse = () => {
     setSelectedCourseId(null);
     setShowManager(true);
+    setSearchParams({ editor: '1' });
   };
 
   const handleEditCourse = (courseId: number) => {
     setSelectedCourseId(courseId);
     setShowManager(true);
+    setSearchParams({ editor: '1', courseId: String(courseId) });
   };
 
   const handleDeleteCourse = async (courseId: number, courseTitle: string) => {
@@ -827,6 +840,7 @@ const CourseList = () => {
   const handleBackToList = () => {
     setShowManager(false);
     setSelectedCourseId(null);
+    setSearchParams({});
     // Refetch all courses
     fetchAllCourses();
   };
@@ -842,7 +856,7 @@ const CourseList = () => {
             ← Back to Course List
           </button>
         </div>
-        <CourseContentManager courseId={selectedCourseId} />
+        <CourseContentManager courseId={selectedCourseId} onBack={handleBackToList} />
       </div>
     );
   }

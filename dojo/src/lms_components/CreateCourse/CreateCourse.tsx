@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Edit3, Save, BookOpen, ArrowLeft,
   Loader2, AlertCircle, Maximize2, Minimize2,
   LayoutTemplate, Eye, CheckCircle, XCircle,
-  Sparkles, Clock, Users, Star, ChevronRight,
-  Zap, Shield, HelpCircle, Bell,
-  Moon, Sun, Menu, X, List
+  Sparkles, Clock, Users, Star,
+  Zap, Shield,
+  Menu, X, List
 } from 'lucide-react';
 import type { CourseContentManagerProps } from './components/Utils/types';
 import { CoursePreview } from './components/CoursePreview/CoursePreview';
@@ -71,8 +72,7 @@ const Header: React.FC<{
   isFullscreen: boolean;
   toggleFullscreen: () => void;
   isNewCourse: boolean;
-  isDarkMode: boolean;
-  toggleDarkMode: () => void;
+  onBack: () => void;
 }> = ({
   title,
   isPublished,
@@ -83,8 +83,7 @@ const Header: React.FC<{
   isFullscreen,
   toggleFullscreen,
   isNewCourse,
-  isDarkMode,
-  toggleDarkMode
+  onBack
 }) => {
     const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -95,7 +94,7 @@ const Header: React.FC<{
           {/* Back Button */}
           <Tooltip text="Go Back">
             <button
-              onClick={() => window.history.back()}
+              onClick={onBack}
               className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all duration-200 hover:scale-105 active:scale-95"
             >
               <ArrowLeft size={22} />
@@ -245,7 +244,7 @@ const LoadingScreen: React.FC = () => (
 );
 
 // --- ERROR SCREEN ---
-const ErrorScreen: React.FC<{ error: string; onRetry?: () => void }> = ({ error, onRetry }) => (
+const ErrorScreen: React.FC<{ error: string; onBack: () => void; onRetry?: () => void }> = ({ error, onBack, onRetry }) => (
   <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-red-50 dark:from-slate-950 dark:via-slate-900 dark:to-red-950 p-6">
     <div className="max-w-md w-full text-center">
       <div className="relative mx-auto w-fit">
@@ -262,7 +261,7 @@ const ErrorScreen: React.FC<{ error: string; onRetry?: () => void }> = ({ error,
       </p>
       <div className="flex gap-4 justify-center">
         <button
-          onClick={() => window.history.back()}
+          onClick={onBack}
           className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
         >
           Go Back
@@ -321,7 +320,8 @@ const QuickStatsBanner: React.FC<{ course: any }> = ({ course }) => (
 );
 
 // --- MAIN COMPONENT ---
-export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ courseId = null }) => {
+export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ courseId = null, onBack }) => {
+  const navigate = useNavigate();
   const {
     course, loading, error, activeTab, selectedLesson, editingLesson, isNewCourse, lessonTab,
     setActiveTab, setSelectedLesson, setEditingLesson, setLessonTab,
@@ -334,27 +334,30 @@ export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ cour
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const handleBack = onBack ?? (() => navigate('/lms/course-list'));
 
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
-      await handleSaveCourse();
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      const saved = await handleSaveCourse();
+      if (saved) {
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+        return true;
+      } else {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 5000);
+        return false;
+      }
     } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 5000);
+      return false;
     }
   };
 
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-
   if (loading) return <LoadingScreen />;
-  if (error || !course) return <ErrorScreen error={error || 'Course not found'} />;
+  if (error || !course) return <ErrorScreen error={error || 'Course not found'} onBack={handleBack} />;
 
   return (
     <div className={`flex flex-col h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden transition-colors duration-300 ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -368,8 +371,7 @@ export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ cour
         isFullscreen={isFullscreen}
         toggleFullscreen={() => setIsFullscreen(!isFullscreen)}
         isNewCourse={isNewCourse}
-        isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
+        onBack={handleBack}
       />
 
       <QuickStatsBanner course={course} />
@@ -474,8 +476,8 @@ export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ cour
               onCancelEdit={() => setEditingLesson(null)}
               onDeleteLesson={() => deleteLesson(selectedLesson)}
               onUpdateLesson={(f, v) => updateLesson(selectedLesson, f, v)}
-              onVideoUpload={(e) => handleVideoUpload(e, selectedLesson)}
-              onVideoRemove={() => removeVideo(selectedLesson)}
+              onVideoUpload={(files) => handleVideoUpload(files, selectedLesson)}
+              onVideoRemove={(index) => removeVideo(selectedLesson, index)}
               onAddAttachment={addAttachment}
               onRemoveAttachment={removeAttachment}
               tests={tests}
@@ -490,6 +492,7 @@ export const CourseContentManager: React.FC<CourseContentManagerProps> = ({ cour
               onUpdateTest={updateTest}
               onUpdateTestQuestion={(tid, qid, f, v) => updateTestQuestion(tid, qid, f, v)}
               onReorder={handleReorder}
+              onSave={handleSave}
             />
           </div>
         )}

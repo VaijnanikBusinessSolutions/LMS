@@ -759,15 +759,16 @@
 //   );
 // };
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Edit3, Trash2, Save, X, Clock, Video,
   FileText, Upload, Paperclip, Link as LinkIcon, File as FileIcon,
-  Play, ExternalLink, Sparkles, FolderOpen, CheckCircle2, AlertCircle,
-  Grid3X3, List, Download, Image, FileVideo, FileAudio, Archive,
-  FileSpreadsheet, Presentation, MoreVertical, Eye, Copy
+  ExternalLink, CheckCircle2, AlertCircle,
+  Grid3X3, List, Download, Image, FileVideo, Archive,
+  FileSpreadsheet, Presentation, MoreVertical, Loader2
 } from 'lucide-react';
-import type { Lesson, LessonTabType } from '../Utils/types';
+import type { Attachment, Lesson, LessonTabType } from '../Utils/types';
+import { API_URL } from '../Utils/utils';
 
 interface LessonEditorProps {
   lesson: Lesson | null;
@@ -776,17 +777,18 @@ interface LessonEditorProps {
   onLessonTabChange: (tab: LessonTabType) => void;
   onEdit: () => void;
   onSave: () => void;
+  onSaveCourse?: () => Promise<boolean>;
   onCancel: () => void;
   onDelete: () => void;
   onUpdateLesson: (field: keyof Lesson, value: any) => void;
-  onVideoUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onVideoUpload: (files: FileList | File[]) => void;
   onVideoRemove: (index?: number) => void; 
-  onAddAttachment: (file: File | null, url: string) => void;
-  onRemoveAttachment: (index: number) => void;
+  onAddAttachment: (file: File | null, url: string, title?: string) => void;
+  onRemoveAttachment: (index: number) => void | Promise<boolean>;
 }
 
 const getFileTypeInfo = (fileName: string, type: string) => {
-  if (type === 'link') {
+  if (type === 'url') {
     return { icon: LinkIcon, color: 'blue', bg: 'from-blue-500 to-cyan-500', label: 'Link' };
   }
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
@@ -808,6 +810,110 @@ const getFileTypeInfo = (fileName: string, type: string) => {
   return fileTypes[ext] || { icon: FileIcon, color: 'violet', bg: 'from-violet-500 to-fuchsia-500', label: ext.toUpperCase() || 'FILE' };
 };
 
+const API_BASE_URL = API_URL.replace(/\/lms\/?$/, '');
+
+const normalizeExternalUrl = (url: string) => {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+};
+
+const extractValidLink = (input: string) => {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  const directCandidate = normalizeExternalUrl(trimmed);
+  try {
+    const parsed = new URL(directCandidate);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString();
+    }
+  } catch {
+    // Fall through to pattern extraction.
+  }
+
+  const urlMatch = trimmed.match(/((https?:\/\/|www\.)[^\s<>"']+)/i);
+  if (!urlMatch) return '';
+
+  const extractedCandidate = normalizeExternalUrl(urlMatch[1]);
+  try {
+    const parsed = new URL(extractedCandidate);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString();
+    }
+  } catch {
+    return '';
+  }
+
+  return '';
+};
+
+const normalizeFileUrl = (url?: string | null) => {
+  if (!url) return '';
+  if (/^https?:\/\/testserver\//i.test(url)) {
+    const normalizedPath = url.replace(/^https?:\/\/testserver/i, '');
+    return `${API_BASE_URL}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`;
+  }
+  if (/^(https?:|blob:|data:)/i.test(url)) return url;
+  if (url.startsWith('/')) return `${API_BASE_URL}${url}`;
+  return `${API_BASE_URL}/${url}`;
+};
+
+const getStoredFileUrl = (att: Attachment) => {
+  const runtimeAttachment = att as Attachment & { file_url?: string; previewUrl?: string; url?: string };
+  const savedFileUrl =
+    typeof runtimeAttachment.file === 'string'
+      ? normalizeFileUrl(runtimeAttachment.file)
+      : normalizeFileUrl(runtimeAttachment.file_url || runtimeAttachment.url || '');
+
+  if (savedFileUrl) return savedFileUrl;
+  if (runtimeAttachment.previewUrl) return runtimeAttachment.previewUrl;
+  return '';
+};
+
+const isUrlAttachment = (att: Attachment) => att.type === 'url' || !!att.url_link;
+const isFileAttachment = (att: Attachment) => att.type === 'file' || !!att.file;
+
+const isImageAttachment = (att: Attachment) => {
+  if (!isFileAttachment(att) || isUrlAttachment(att)) return false;
+  const file = att.file;
+  if (file instanceof File && file.type.startsWith('image/')) return true;
+  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(att.name || getStoredFileUrl(att));
+};
+
+const AttachmentPreview: React.FC<{ att: Attachment; fileInfo: ReturnType<typeof getFileTypeInfo> }> = ({ att, fileInfo }) => {
+  const Icon = fileInfo.icon;
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const storedFileUrl = getStoredFileUrl(att);
+
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [att.file, att.name, storedFileUrl]);
+
+  const imageUrl = isImageAttachment(att) && !imageLoadFailed ? storedFileUrl : '';
+
+  if (imageUrl) {
+    return (
+      <div className="w-full aspect-square rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden mb-4 shadow-lg group-hover:scale-105 transition-transform">
+        <img
+          src={imageUrl}
+          alt={att.name || 'Attached image'}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          onError={() => setImageLoadFailed(true)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`w-full aspect-square rounded-xl bg-gradient-to-br ${fileInfo.bg} flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform`}>
+      <Icon size={32} className="text-white" />
+    </div>
+  );
+};
+
 export const LessonEditor: React.FC<LessonEditorProps> = ({
   lesson,
   editingLesson,
@@ -815,6 +921,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   onLessonTabChange,
   onEdit,
   onSave,
+  onSaveCourse,
   onCancel,
   onDelete,
   onUpdateLesson,
@@ -823,34 +930,128 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   onAddAttachment,
   onRemoveAttachment
 }) => {
-  const [urlInput, setUrlInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkTitleInput, setLinkTitleInput] = useState('');
+  const [linkInput, setLinkInput] = useState('');
+  const [linkInputError, setLinkInputError] = useState('');
+  const [videoUploadMessage, setVideoUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [videoSaveStatus, setVideoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const mainVideoInputRef = useRef<HTMLInputElement>(null);
+  const addMoreVideoInputRef = useRef<HTMLInputElement>(null);
+  const materialInputRef = useRef<HTMLInputElement>(null);
 
   if (!lesson) {
     return <div className="flex flex-col items-center justify-center h-full">Select a lesson...</div>;
   }
 
   const isEditing = editingLesson === lesson.id;
+  const canManageAssets = isEditing;
   const hasVideo = lesson.videos && lesson.videos.length > 0;
   const totalMaterials = lesson.attachments?.length || 0;
-  const fileCount = lesson.attachments?.filter(a => a.type === 'file').length || 0;
-  const linkCount = lesson.attachments?.filter(a => a.type === 'link').length || 0;
+  const fileCount = lesson.attachments?.filter(isFileAttachment).length || 0;
+  const linkCount = lesson.attachments?.filter(isUrlAttachment).length || 0;
   const pendingCount = lesson.attachments?.filter(a => !a.id).length || 0;
   const savedCount = totalMaterials - pendingCount;
 
+  useEffect(() => {
+    if (canManageAssets) return;
+    setShowLinkInput(false);
+    setLinkInput('');
+    setLinkTitleInput('');
+    setLinkInputError('');
+  }, [canManageAssets]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canManageAssets) {
+      e.target.value = '';
+      return;
+    }
     if (e.target.files && e.target.files.length > 0) {
       Array.from(e.target.files).forEach(file => onAddAttachment(file, ''));
       e.target.value = '';
     }
   };
 
-  const handleUrlAdd = () => {
-    if (urlInput.trim()) {
-      onAddAttachment(null, urlInput);
-      setUrlInput('');
+  const handleAddLink = () => {
+    if (!canManageAssets) return;
+    const extractedLink = extractValidLink(linkInput);
+    if (!extractedLink) {
+      setLinkInputError('Enter a valid link or paste text that contains one URL.');
+      return;
+    }
+    if (extractedLink.length > 2048) {
+      setLinkInputError('This link is too long to save.');
+      return;
+    }
+
+    setLinkInputError('');
+    onAddAttachment(null, extractedLink, linkTitleInput.trim().slice(0, 200));
+    setLinkInput('');
+    setLinkTitleInput('');
+    setShowLinkInput(false);
+  };
+
+  const isAcceptedVideoFile = (file: File) => {
+    const extensionLooksLikeVideo = /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(file.name);
+    return file.type.startsWith('video/') || extensionLooksLikeVideo;
+  };
+
+  const handleSelectedVideoFiles = (selectedFiles: File[]) => {
+    if (!canManageAssets) return;
+    if (!selectedFiles.length) return;
+
+    const videoFiles = selectedFiles.filter(isAcceptedVideoFile);
+    if (!videoFiles.length) {
+      setVideoUploadMessage({ type: 'error', text: 'Please select a valid video file.' });
+      return;
+    }
+
+    onVideoUpload(videoFiles);
+    const skippedCount = selectedFiles.length - videoFiles.length;
+    setVideoUploadMessage({
+      type: 'success',
+      text: skippedCount > 0
+        ? `${videoFiles.length} video(s) added. ${skippedCount} unsupported file(s) skipped. Click Save to upload.`
+        : `${videoFiles.length} video(s) added. Click Save to upload.`
+    });
+  };
+
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = Array.from(e.currentTarget.files ?? []);
+    handleSelectedVideoFiles(files);
+    e.currentTarget.value = '';
+  };
+
+  const handleVideoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (!canManageAssets) return;
+    handleSelectedVideoFiles(Array.from(e.dataTransfer.files));
+  };
+
+  const handleSaveVideos = async () => {
+    if (!canManageAssets || !onSaveCourse) return;
+
+    setVideoSaveStatus('saving');
+    try {
+      const saved = await onSaveCourse();
+      if (!saved) {
+        throw new Error('Course save failed');
+      }
+      setVideoSaveStatus('saved');
+      setVideoUploadMessage({ type: 'success', text: 'Video saved successfully.' });
+      setTimeout(() => setVideoSaveStatus('idle'), 3000);
+    } catch (error) {
+      console.error('Video save failed:', error);
+      setVideoSaveStatus('error');
+      setVideoUploadMessage({ type: 'error', text: 'Video save failed. Check that the backend server is running and try again.' });
+      setTimeout(() => setVideoSaveStatus('idle'), 5000);
     }
   };
 
@@ -866,8 +1067,80 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!canManageAssets) return;
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       Array.from(e.dataTransfer.files).forEach(file => onAddAttachment(file, ''));
+    }
+  };
+
+  const getAttachmentUrl = (att: Attachment) => (
+    att.url_link ? normalizeExternalUrl(att.url_link) : getStoredFileUrl(att)
+  );
+
+  const handleOpenAttachment = (att: Attachment) => {
+    const persistedUrl = getAttachmentUrl(att);
+    if (persistedUrl) {
+      window.open(persistedUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    if (att.file instanceof File) {
+      const objectUrl = URL.createObjectURL(att.file);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+    }
+  };
+
+  const handleDownloadAttachment = (att: Attachment) => {
+    const savedUrl = getAttachmentUrl(att);
+    const downloadUrl = savedUrl || (att.file instanceof File ? URL.createObjectURL(att.file) : '');
+    if (!downloadUrl) return;
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = att.name || 'material';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    if (!savedUrl && downloadUrl.startsWith('blob:')) {
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
+    }
+  };
+
+  const handleCopyAttachmentName = async (att: Attachment) => {
+    const textToCopy = isUrlAttachment(att) ? getAttachmentUrl(att) : att.name;
+    if (!textToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = textToCopy;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  };
+
+  const handleDeleteAttachment = async (index: number, att: Attachment) => {
+    if (!canManageAssets) return;
+    const title = isUrlAttachment(att) ? 'this link' : `"${att.name}"`;
+    if (!window.confirm(`Delete ${title}?`)) return;
+
+    try {
+      const removed = await onRemoveAttachment(index);
+      if (!removed) {
+        throw new Error('Attachment was not removed.');
+      }
+      setActiveMenu(null);
+    } catch (error) {
+      console.error('Failed to delete attachment:', error);
+      alert('Failed to delete this material. Please try again.');
     }
   };
 
@@ -926,19 +1199,19 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
           <div className="flex gap-3 shrink-0">
             {isEditing ? (
               <>
-                <button onClick={onSave} className="bg-violet-600 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2">
+                <button type="button" onClick={onSave} className="bg-violet-600 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2">
                   <Save size={18} /> Save
                 </button>
-                <button onClick={onCancel} className="bg-white border-2 border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2">
+                <button type="button" onClick={onCancel} className="bg-white border-2 border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2">
                   <X size={18} /> Cancel
                 </button>
               </>
             ) : (
               <>
-                <button onClick={onEdit} className="bg-white border-2 border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2">
+                <button type="button" onClick={onEdit} className="bg-white border-2 border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2">
                   <Edit3 size={18} /> Edit
                 </button>
-                <button onClick={onDelete} className="bg-white border-2 border-slate-200 text-rose-500 p-2.5 rounded-xl hover:bg-rose-50">
+                <button type="button" onClick={onDelete} className="bg-white border-2 border-slate-200 text-rose-500 p-2.5 rounded-xl hover:bg-rose-50">
                   <Trash2 size={18} />
                 </button>
               </>
@@ -954,6 +1227,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
             { key: 'materials', label: 'Materials', icon: Paperclip, color: 'blue', badge: totalMaterials }
           ].map(({ key, label, icon: Icon, badge }) => (
             <button
+              type="button"
               key={key}
               onClick={() => onLessonTabChange(key as LessonTabType)}
               className={`relative flex items-center gap-2.5 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-300 ${lessonTab === key
@@ -1007,18 +1281,47 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   </div>
                 </div>
                 
-                {hasVideo && (
-                  <div>
-                    <input type="file" accept="video/*" multiple onChange={onVideoUpload} className="hidden" id="add-more-video" />
-                    <label 
-                      htmlFor="add-more-video"
+                {hasVideo && canManageAssets && (
+                  <div className="flex items-center gap-3">
+                    <input
+                      ref={addMoreVideoInputRef}
+                      type="file"
+                      accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v"
+                      multiple
+                      onChange={handleVideoFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addMoreVideoInputRef.current?.click()}
                       className="flex items-center gap-2 px-4 py-2 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-lg text-sm font-bold cursor-pointer hover:bg-rose-100 transition-colors"
                     >
                       <Upload size={16} /> Add Video
-                    </label>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveVideos}
+                      disabled={videoSaveStatus === 'saving'}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {videoSaveStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      {videoSaveStatus === 'saving' ? 'Saving...' : 'Save Videos'}
+                    </button>
                   </div>
                 )}
               </div>
+
+              {videoUploadMessage && (
+                <div
+                  className={`mb-5 rounded-xl border px-4 py-3 text-sm font-semibold ${
+                    videoUploadMessage.type === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-rose-200 bg-rose-50 text-rose-700'
+                  }`}
+                >
+                  {videoUploadMessage.text}
+                </div>
+              )}
 
               {hasVideo ? (
                 <div className="space-y-6">
@@ -1044,6 +1347,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                             </p>
                           </div>
                           <button
+                            type="button"
                             onClick={() => onVideoRemove(index)}
                             className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
                             title="Remove Video"
@@ -1064,7 +1368,7 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   }`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
+                  onDrop={handleVideoDrop}
                 >
                   <div className="relative">
                     <div className="absolute inset-0 bg-rose-500/20 blur-3xl rounded-full animate-pulse" />
@@ -1079,14 +1383,24 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     Upload one or multiple video files.
                     <span className="block mt-1 text-sm">Supports MP4, AVI, MOV • Max 500MB</span>
                   </p>
-                  <input type="file" accept="video/*" multiple onChange={onVideoUpload} className="hidden" id="main-video-upload" />
-                  <label
-                    htmlFor="main-video-upload"
-                    className="inline-flex items-center gap-3 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white px-8 py-4 rounded-2xl cursor-pointer font-bold transition-all duration-300 shadow-xl shadow-rose-500/30 hover:shadow-2xl hover:shadow-rose-500/40 hover:scale-105"
-                  >
-                    <Upload size={20} />
-                    Select Video Files
-                  </label>
+                  <input
+                    ref={mainVideoInputRef}
+                    type="file"
+                    accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v"
+                    multiple
+                    onChange={handleVideoFileChange}
+                    className="hidden"
+                  />
+                  {canManageAssets && (
+                    <button
+                      type="button"
+                      onClick={() => mainVideoInputRef.current?.click()}
+                      className="inline-flex items-center gap-3 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white px-8 py-4 rounded-2xl cursor-pointer font-bold transition-all duration-300 shadow-xl shadow-rose-500/30 hover:shadow-2xl hover:shadow-rose-500/40 hover:scale-105"
+                    >
+                      <Upload size={20} />
+                      Select Video Files
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1141,71 +1455,6 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                 </div>
               </div>
 
-              {/* Upload Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* File Upload Box */}
-                <div
-                  className={`bg-white dark:bg-slate-900 border-2 rounded-2xl p-6 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 transition-all duration-300 ${isDragging ? 'border-violet-400 ring-4 ring-violet-500/20' : 'border-slate-200 dark:border-slate-800'
-                    }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="p-2.5 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl shadow-lg shadow-violet-500/25">
-                      <Upload size={18} className="text-white" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900 dark:text-white">Upload Files</h5>
-                      <p className="text-xs text-slate-500">PDFs, documents, images, etc.</p>
-                    </div>
-                  </div>
-                  <input type="file" onChange={handleFileUpload} className="hidden" id="att-upload" multiple />
-                  <label
-                    htmlFor="att-upload"
-                    className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 transition-all duration-300 group"
-                  >
-                    <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl group-hover:bg-violet-100 dark:group-hover:bg-violet-900/30 transition-colors mb-3">
-                      <FolderOpen size={32} className="text-slate-400 group-hover:text-violet-500 transition-colors" />
-                    </div>
-                    <span className="font-semibold text-slate-600 dark:text-slate-400 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-                      Click or drag files here
-                    </span>
-                  </label>
-                </div>
-
-                {/* Link Box */}
-                <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50">
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="p-2.5 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl shadow-lg shadow-blue-500/25">
-                      <LinkIcon size={18} className="text-white" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900 dark:text-white">Add Link</h5>
-                      <p className="text-xs text-slate-500">External resources, articles, tools</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <input
-                      type="text"
-                      value={urlInput}
-                      onChange={e => setUrlInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleUrlAdd()}
-                      placeholder="https://example.com/resource"
-                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:border-blue-500 dark:focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-                    />
-                    <button
-                      onClick={handleUrlAdd}
-                      disabled={!urlInput.trim()}
-                      className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/25 disabled:shadow-none flex items-center justify-center gap-2"
-                    >
-                      <LinkIcon size={16} />
-                      Add External Link
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Materials List/Grid */}
               <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50">
                 {/* Header with View Toggle */}
@@ -1219,6 +1468,34 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full text-xs font-bold">
                         {totalMaterials} items
                       </span>
+                      <input
+                        ref={materialInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      {canManageAssets && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => materialInputRef.current?.click()}
+                            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                          >
+                            <Upload size={14} />
+                            Add Image
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowLinkInput(current => !current)}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <LinkIcon size={14} />
+                            Add Link
+                          </button>
+                        </>
+                      )}
                       <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
                         <button
                           onClick={() => setViewMode('grid')}
@@ -1241,11 +1518,67 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                       </div>
                     </div>
                   </div>
+                  {showLinkInput && (
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        type="text"
+                        value={linkTitleInput}
+                        onChange={(e) => setLinkTitleInput(e.target.value)}
+                        placeholder="Link title (optional)"
+                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                      />
+                      <input
+                        type="text"
+                        value={linkInput}
+                        onChange={(e) => setLinkInput(e.target.value)}
+                        placeholder="Paste link here"
+                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-violet-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAddLink}
+                          disabled={!linkInput.trim()}
+                          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Save Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLinkInput('');
+                            setLinkTitleInput('');
+                            setLinkInputError('');
+                            setShowLinkInput(false);
+                          }}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                      {linkInputError && (
+                        <p className="mt-3 text-sm font-medium text-rose-600 dark:text-rose-400">
+                          {linkInputError}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Empty State */}
                 {(!lesson.attachments || lesson.attachments.length === 0) ? (
-                  <div className="p-16 text-center">
+                  <div
+                    className={`p-16 text-center transition-all duration-300 ${
+                      isDragging
+                        ? 'bg-violet-50 dark:bg-violet-950/20'
+                        : ''
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
                     <div className="relative inline-block">
                       <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
                       <div className="relative w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1254,32 +1587,70 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                     </div>
                     <p className="text-slate-500 font-semibold text-lg">No materials added yet</p>
                     <p className="text-slate-400 text-sm mt-2 max-w-sm mx-auto">
-                      Upload files or add external links to provide additional resources for your students
+                      Add an image and it will appear here under attached materials.
                     </p>
+                    {canManageAssets && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => materialInputRef.current?.click()}
+                          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+                        >
+                          <Upload size={16} />
+                          Select Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowLinkInput(true)}
+                          className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <LinkIcon size={16} />
+                          Add Link
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : viewMode === 'grid' ? (
                   /* Grid View */
                   <div className="p-6">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                       {lesson.attachments?.map((att, index) => {
-                        const fileInfo = getFileTypeInfo(att.name, att.type);
-                        const Icon = fileInfo.icon;
+                        const isLink = isUrlAttachment(att);
+                        const isFile = isFileAttachment(att);
+                        const fileInfo = getFileTypeInfo(att.name, isLink ? 'url' : 'file');
+                        const attachmentUrl = getAttachmentUrl(att);
+                        const materialTitle = isLink ? 'External Link' : att.name || 'Attached File';
+                        const materialKey = att.id ?? (att as any).tempId ?? `${att.name}-${index}`;
 
                         return (
                           <div
-                            key={index}
+                            key={materialKey}
                             className="group relative bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border-2 border-transparent hover:border-slate-200 dark:hover:border-slate-700 hover:shadow-lg transition-all duration-300"
                           >
-                            {/* File Icon */}
-                            <div className={`w-full aspect-square rounded-xl bg-gradient-to-br ${fileInfo.bg} flex items-center justify-center mb-4 shadow-lg group-hover:scale-105 transition-transform`}>
-                              <Icon size={32} className="text-white" />
-                            </div>
+                            <AttachmentPreview att={att} fileInfo={fileInfo} />
 
                             {/* File Info */}
                             <div className="space-y-2">
-                              <p className="font-semibold text-sm text-slate-900 dark:text-white truncate" title={att.name}>
-                                {att.name}
-                              </p>
+                              {isLink && attachmentUrl ? (
+                                <div className="space-y-1">
+                                  <p className="font-semibold text-sm text-slate-900 dark:text-white truncate" title={materialTitle}>
+                                    {materialTitle}
+                                  </p>
+                                  <a
+                                    href={attachmentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2 truncate"
+                                    title={attachmentUrl}
+                                  >
+                                    {attachmentUrl}
+                                  </a>
+                                </div>
+                              ) : (
+                                <p className="font-semibold text-sm text-slate-900 dark:text-white truncate" title={att.name}>
+                                  {att.name}
+                                </p>
+                              )}
                               <div className="flex items-center justify-between">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${att.id
                                     ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
@@ -1290,6 +1661,25 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                                 <span className="text-xs font-bold text-slate-400 uppercase">
                                   {fileInfo.label}
                                 </span>
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAttachment(att)}
+                                  disabled={!attachmentUrl && !(att.file instanceof File)}
+                                  className="flex-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                  Open
+                                </button>
+                                {canManageAssets && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteAttachment(index, att)}
+                                    className="flex-1 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 dark:hover:bg-rose-900/30"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
                               </div>
                             </div>
 
@@ -1303,46 +1693,71 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               </button>
 
                               {activeMenu === index && (
-                                <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
-                                  {att.url_link && (
-                                    <a
-                                      href={att.url_link}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-                                      onClick={() => setActiveMenu(null)}
-                                    >
-                                      <ExternalLink size={14} />
-                                      Open Link
-                                    </a>
-                                  )}
-                                  {att.type === 'file' && (
+                                <div
+                                  className="absolute right-0 mt-1 w-40 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-10 animate-in fade-in slide-in-from-top-2 duration-200"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleOpenAttachment(att);
+                                      setActiveMenu(null);
+                                    }}
+                                    disabled={!attachmentUrl && !(att.file instanceof File)}
+                                    title={`Open ${materialTitle}`}
+                                    className="block w-full px-4 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    Open
+                                  </button>
+                                  {isFile && (
                                     <>
-                                      <button className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 w-full text-left">
-                                        <Eye size={14} />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleOpenAttachment(att);
+                                          setActiveMenu(null);
+                                        }}
+                                        disabled={!attachmentUrl && !(att.file instanceof File)}
+                                        title={`Preview ${materialTitle}`}
+                                        className="block w-full px-4 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
                                         Preview
                                       </button>
-                                      <button className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 w-full text-left">
-                                        <Download size={14} />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleDownloadAttachment(att);
+                                          setActiveMenu(null);
+                                        }}
+                                        disabled={!attachmentUrl && !(att.file instanceof File)}
+                                        className="block w-full px-4 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
                                         Download
                                       </button>
                                     </>
                                   )}
-                                  <button className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 w-full text-left">
-                                    <Copy size={14} />
-                                    Copy Name
-                                  </button>
-                                  <hr className="my-2 border-slate-200 dark:border-slate-700" />
                                   <button
+                                    type="button"
                                     onClick={() => {
-                                      onRemoveAttachment(index);
+                                      handleCopyAttachmentName(att);
                                       setActiveMenu(null);
                                     }}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 w-full text-left"
+                                    title={`Copy ${isLink ? 'link' : 'name'}`}
+                                    className="block w-full px-4 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
                                   >
-                                    <Trash2 size={14} />
-                                    Delete
+                                    {isLink ? 'Copy Link' : 'Copy Name'}
                                   </button>
+                                  <hr className="my-2 border-slate-200 dark:border-slate-700" />
+                                  {canManageAssets && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAttachment(index, att)}
+                                      title={`Delete ${materialTitle}`}
+                                      className="block w-full px-4 py-2 text-left text-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1355,12 +1770,17 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                   /* List View */
                   <div className="divide-y divide-slate-100 dark:divide-slate-800">
                     {lesson.attachments?.map((att, index) => {
-                      const fileInfo = getFileTypeInfo(att.name, att.type);
+                      const isLink = isUrlAttachment(att);
+                      const isFile = isFileAttachment(att);
+                      const fileInfo = getFileTypeInfo(att.name, isLink ? 'url' : 'file');
                       const Icon = fileInfo.icon;
+                      const attachmentUrl = getAttachmentUrl(att);
+                      const materialTitle = isLink ? 'External Link' : att.name || 'Attached File';
+                      const materialKey = att.id ?? (att as any).tempId ?? `${att.name}-${index}`;
 
                       return (
                         <div
-                          key={index}
+                          key={materialKey}
                           className="flex items-center justify-between p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all duration-200 group"
                         >
                           <div className="flex items-center gap-4 overflow-hidden">
@@ -1368,9 +1788,26 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                               <Icon size={20} className="text-white" />
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-slate-900 dark:text-white truncate max-w-md">
-                                {att.name}
-                              </p>
+                              {isLink && attachmentUrl ? (
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-slate-900 dark:text-white truncate max-w-md" title={materialTitle}>
+                                    {materialTitle}
+                                  </p>
+                                  <a
+                                    href={attachmentUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline underline-offset-2 truncate max-w-md"
+                                    title={attachmentUrl}
+                                  >
+                                    {attachmentUrl}
+                                  </a>
+                                </div>
+                              ) : (
+                                <p className="font-semibold text-slate-900 dark:text-white truncate max-w-md" title={att.name}>
+                                  {att.name}
+                                </p>
+                              )}
                               <div className="flex items-center gap-3 mt-1">
                                 {att.id ? (
                                   <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-full font-medium">
@@ -1389,9 +1826,9 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {att.url_link && (
+                            {attachmentUrl && (
                               <a
-                                href={att.url_link}
+                                href={attachmentUrl}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 px-3 py-2 rounded-lg transition-all"
@@ -1400,19 +1837,27 @@ export const LessonEditor: React.FC<LessonEditorProps> = ({
                                 Open
                               </a>
                             )}
-                            {att.type === 'file' && (
-                              <button className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-all">
+                            {isFile && (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadAttachment(att)}
+                                disabled={!attachmentUrl && !(att.file instanceof File)}
+                                className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-2 rounded-lg transition-all"
+                              >
                                 <Download size={14} />
                                 Download
                               </button>
                             )}
-                            <button
-                              onClick={() => onRemoveAttachment(index)}
-                              className="p-2.5 text-slate-400 hover:text-white hover:bg-rose-500 rounded-lg transition-all duration-200"
-                              title="Remove"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            {canManageAssets && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(index, att)}
+                                className="p-2.5 text-slate-400 hover:text-white hover:bg-rose-500 rounded-lg transition-all duration-200"
+                                title={`Delete ${materialTitle}`}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

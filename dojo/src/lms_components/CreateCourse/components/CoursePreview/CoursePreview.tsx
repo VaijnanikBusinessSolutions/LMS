@@ -310,7 +310,7 @@ const LessonCard: React.FC<{
                   Free Preview
                 </span>
               )}
-              {(lesson.videoUrl || lesson.video) && (
+              {((lesson.videos?.length || 0) > 0 || lesson.videoUrl || lesson.video) && (
                 <span className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg text-xs font-semibold">
                   <Video size={14} />
                   Video
@@ -335,7 +335,7 @@ const LessonCard: React.FC<{
         </div>
 
         {/* Toggle Button */}
-        <button className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+        <button type="button" className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
           {isExpanded ? (
             <ChevronUp size={20} className="text-slate-400" />
           ) : (
@@ -359,7 +359,7 @@ const LessonCard: React.FC<{
             </p>
           )}
           
-          <button className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
+          <button type="button" className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
             lesson.sample
               ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-violet-500/30 hover:scale-105'
               : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
@@ -384,7 +384,7 @@ const LessonCard: React.FC<{
 
 // --- MAIN COMPONENT ---
 export const CoursePreview: React.FC<CoursePreviewProps> = ({ course }) => {
-  const [expandedLesson, setExpandedLesson] = useState<string | null>(null);
+  const [expandedLesson, setExpandedLesson] = useState<number | null>(null);
   const [isWishlisted, setIsWishlisted] = useState(false);
 
   const completedLessons = course.roadmap?.filter(l => l.completed).length || 0;

@@ -89,9 +89,9 @@
 export interface Attachment {
   id?: number;
   name: string;
-  file?: File;
+  file?: File | string | null;
   url_link?: string;
-  type: 'file' | 'url';
+  type?: 'file' | 'url';
 }
 
 // === NEW INTERFACE ===
@@ -178,4 +178,5 @@ export type LessonTabType = 'content' | 'video' | 'materials';
 
 export interface CourseContentManagerProps {
   courseId?: number | null;
+  onBack?: () => void;
 }

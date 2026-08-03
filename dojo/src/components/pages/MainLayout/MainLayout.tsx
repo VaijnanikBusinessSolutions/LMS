@@ -237,6 +237,8 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
     return [];
 };
 
+const LMS_NOTIFICATIONS_URL = `${API_ENDPOINTS.BASE_URL}/lms/notifications/`;
+
 const MainLayout = () => {
     const { designMode } = useDesign();
     const { theme } = useTheme();
@@ -265,7 +267,7 @@ const MainLayout = () => {
         if (!token) return;
 
         try {
-            const response = await fetch(`http://127.0.0.1:8000/lms/notifications/`, {
+            const response = await fetch(LMS_NOTIFICATIONS_URL, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -277,8 +279,18 @@ const MainLayout = () => {
                 const notificationList = normalizeNotifications(data);
                 setNotifications(notificationList);
                 setUnreadCount(notificationList.filter((n) => !n.is_read).length);
+            } else {
+                console.error("Notification Error:", `Request failed with status ${response.status}`);
             }
-        } catch (err) { console.error("Notification Error:", err); }
+        } catch (err) {
+            setNotifications([]);
+            setUnreadCount(0);
+            if (err instanceof TypeError) {
+                console.warn("Notification service unavailable:", LMS_NOTIFICATIONS_URL);
+                return;
+            }
+            console.error("Notification Error:", err);
+        }
     }, [handleLogout]);
 
     useEffect(() => {
@@ -286,9 +298,18 @@ const MainLayout = () => {
         const fetchCompanyLogo = async () => {
             try {
                 const response = await fetch(`${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.LOGOS}`);
+                if (!response.ok) {
+                    throw new Error(`Logo request failed with status ${response.status}`);
+                }
                 const data = await response.json();
                 if (data?.logo_url) setCompanyLogo({ logo: data.logo_url });
-            } catch (error) { console.error("Logo Error:", error); }
+            } catch (error) {
+                if (error instanceof TypeError) {
+                    console.warn("Logo service unavailable:", `${API_ENDPOINTS.BASE_URL}${API_ENDPOINTS.LOGOS}`);
+                    return;
+                }
+                console.error("Logo Error:", error);
+            }
             finally { setLogoLoading(false); }
         };
         fetchCompanyLogo();

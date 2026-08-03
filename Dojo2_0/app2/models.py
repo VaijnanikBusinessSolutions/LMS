@@ -422,7 +422,7 @@ class EmployeeGrowthReport(models.Model):
 class LessonAttachment(models.Model):
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name="attachments")
     file = models.FileField(upload_to="lesson_materials/", blank=True, null=True)
-    url_link = models.URLField(blank=True, null=True)
+    url_link = models.URLField(max_length=2048, blank=True, null=True)
     name = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

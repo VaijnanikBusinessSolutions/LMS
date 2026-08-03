@@ -8,8 +8,9 @@ const RequireAuth: React.FC = () => {
   const { isAuthenticated, loading } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
 
-  // While checking auth (e.g., during initial app load)
-  if (loading) {
+  // Only block rendering during the initial auth check. Background refreshes
+  // should not unmount the current page, because file pickers trigger focus.
+  if (loading && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex items-center gap-3 text-gray-600">

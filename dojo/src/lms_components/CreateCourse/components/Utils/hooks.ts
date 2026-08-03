@@ -515,7 +515,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Course, Lesson, CourseStats, TabType, LessonTabType, Test } from './types';
 import { createNewCourseTemplate, createNewLesson, generateLessonId, API_URL } from './utils';
-import { fetchCourse, saveCourse, refreshCourseData, uploadLessonAttachments } from './api';
+import { deleteLessonAttachment, fetchCourse, saveCourse, refreshCourseData, uploadLessonAttachments, uploadSingleLessonAttachment } from './api';
+
+let materialAutoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let materialAutoSaveInProgress = false;
+let materialAutoSaveQueued = false;
+const deletedPendingMaterialIds = new Set<number>();
 
 export const useCourseManager = (courseId?: number | null) => {
   const [course, setCourse] = useState<Course | null>(null);
@@ -534,6 +539,12 @@ export const useCourseManager = (courseId?: number | null) => {
   const courseRef = useRef<Course | null>(null);
   const testsRef = useRef<Test[]>([]);
 
+  const revokeAttachmentPreview = useCallback((attachment?: { previewUrl?: string }) => {
+    if (attachment?.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.previewUrl);
+    }
+  }, []);
+
   useEffect(() => {
     courseRef.current = course;
   }, [course]);
@@ -541,6 +552,20 @@ export const useCourseManager = (courseId?: number | null) => {
   useEffect(() => {
     testsRef.current = tests;
   }, [tests]);
+
+  useEffect(() => {
+    return () => {
+      if (materialAutoSaveTimer) {
+        clearTimeout(materialAutoSaveTimer);
+        materialAutoSaveTimer = null;
+      }
+
+      const snapshot = courseRef.current;
+      snapshot?.roadmap?.forEach(lesson => {
+        (lesson.attachments || []).forEach(att => revokeAttachmentPreview(att as { previewUrl?: string }));
+      });
+    };
+  }, [revokeAttachmentPreview]);
 
   useEffect(() => {
     const initializeCourse = async () => {
@@ -581,28 +606,158 @@ export const useCourseManager = (courseId?: number | null) => {
     setTests(reorderedTests);
   };
 
-  const addAttachment = (lessonId: number, file: File | null, url: string = '') => {
+  const saveCourseWithAttachments = useCallback(async (courseSnapshot: Course, showAlert: boolean) => {
+    const result = await saveCourse({ ...courseSnapshot, tests: testsRef.current }, isNewCourse);
+
+    if (result && result.roadmap) {
+      const sortedOldLessons = (courseSnapshot.roadmap || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+      const sortedNewLessons = (result.roadmap || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      for (let i = 0; i < sortedNewLessons.length; i++) {
+        const savedLesson = sortedNewLessons[i];
+        const localLesson = sortedOldLessons[i];
+        const pending = (localLesson?.attachments || []).filter(a =>
+          !a.id && ((a.file instanceof File) || (a.url_link && a.url_link.trim() !== ''))
+        );
+
+        if (pending.length > 0) {
+          await uploadLessonAttachments(savedLesson.id, pending);
+        }
+      }
+    }
+
+    const refreshed = await refreshCourseData(result.id);
+    setCourse(refreshed);
+    setTests(refreshed.tests || []);
+    setIsNewCourse(false);
+    if (showAlert) alert('Course saved successfully!');
+    return true;
+  }, [isNewCourse]);
+
+  const scheduleMaterialAutoSave = useCallback(() => {
+    if (materialAutoSaveTimer) {
+      clearTimeout(materialAutoSaveTimer);
+    }
+
+    materialAutoSaveTimer = setTimeout(async () => {
+      if (materialAutoSaveInProgress) {
+        materialAutoSaveQueued = true;
+        return;
+      }
+
+      const snapshot = courseRef.current;
+      if (!snapshot) return;
+
+      const hasPendingMaterials = snapshot.roadmap.some(lesson =>
+        (lesson.attachments || []).some(a =>
+          !a.id && ((a.file instanceof File) || (a.url_link && a.url_link.trim() !== ''))
+        )
+      );
+      if (!hasPendingMaterials) return;
+
+      materialAutoSaveInProgress = true;
+      try {
+        await saveCourseWithAttachments(snapshot, false);
+      } catch (error) {
+        console.error('Material auto-save failed:', error);
+        alert('Failed to save attached material. Please check the backend server and try again.');
+      } finally {
+        materialAutoSaveInProgress = false;
+        if (materialAutoSaveQueued) {
+          materialAutoSaveQueued = false;
+          scheduleMaterialAutoSave();
+        }
+      }
+    }, 500);
+  }, [saveCourseWithAttachments]);
+
+  const addAttachment = (lessonId: number, file: File | null, url: string = '', title: string = '') => {
     if (!course) return;
+    const isImageFile = !!file && (file.type.startsWith('image/') || /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(file.name));
+    const trimmedTitle = title.trim();
+    const tempId = -Date.now();
+    const newAtt: any = {
+      tempId,
+      name: file ? file.name : (trimmedTitle || url),
+      type: file ? 'file' : 'url',
+      file: file || undefined,
+      url_link: url || undefined,
+      previewUrl: isImageFile && file ? URL.createObjectURL(file) : undefined
+    };
+
     setCourse(prev => {
       if (!prev) return null;
       const updatedRoadmap = prev.roadmap.map(lesson => {
         if (lesson.id === lessonId) {
-          const newAtt: any = {
-            name: file ? file.name : url,
-            type: file ? 'file' : 'url',
-            file: file || undefined,
-            url_link: url || undefined
-          };
           return { ...lesson, attachments: [...(lesson.attachments || []), newAtt] };
         }
         return lesson;
       });
       return { ...prev, roadmap: updatedRoadmap };
     });
+
+    if (lessonId > 0) {
+      uploadSingleLessonAttachment(lessonId, newAtt)
+        .then(savedAttachment => {
+          if (deletedPendingMaterialIds.has(tempId)) {
+            deletedPendingMaterialIds.delete(tempId);
+            revokeAttachmentPreview(newAtt);
+            if (savedAttachment.id) {
+              deleteLessonAttachment(savedAttachment.id).catch(error => {
+                console.error('Failed to clean up deleted pending attachment:', error);
+              });
+            }
+            return;
+          }
+
+          revokeAttachmentPreview(newAtt);
+
+          setCourse(prev => {
+            if (!prev) return null;
+            const updatedRoadmap = prev.roadmap.map(lesson => {
+              if (lesson.id !== lessonId) return lesson;
+              const attachments = (lesson.attachments || []).map(att =>
+                (att as any).tempId === tempId ? savedAttachment : att
+              );
+              return { ...lesson, attachments };
+            });
+            return { ...prev, roadmap: updatedRoadmap };
+          });
+        })
+        .catch(error => {
+          console.error('Attachment upload failed:', error);
+          alert('Failed to save attached material. Please check the backend server and try again.');
+        });
+      return;
+    }
+
+    scheduleMaterialAutoSave();
   };
 
-  const removeAttachment = (lessonId: number, index: number) => {
-    if (!course) return;
+  const removeAttachment = async (lessonId: number, index: number) => {
+    if (materialAutoSaveTimer) {
+      clearTimeout(materialAutoSaveTimer);
+      materialAutoSaveTimer = null;
+    }
+
+    const currentCourse = courseRef.current;
+    if (!currentCourse) return false;
+
+    const lesson = currentCourse.roadmap.find(l => l.id === lessonId);
+    const attachment = lesson?.attachments?.[index];
+    if (!attachment) return false;
+
+    const tempId = (attachment as any).tempId;
+    if (typeof tempId === 'number') {
+      deletedPendingMaterialIds.add(tempId);
+    }
+
+    if (attachment.id) {
+      await deleteLessonAttachment(attachment.id);
+    }
+
+    revokeAttachmentPreview(attachment as { previewUrl?: string });
+
     setCourse(prev => {
       if (!prev) return null;
       const updatedRoadmap = prev.roadmap.map(lesson => {
@@ -615,42 +770,19 @@ export const useCourseManager = (courseId?: number | null) => {
       });
       return { ...prev, roadmap: updatedRoadmap };
     });
+    return true;
   };
 
   const handleSaveCourse = useCallback(async () => {
     const currentCourse = courseRef.current;
-    if (!currentCourse) return;
+    if (!currentCourse) return false;
 
     try {
-      const result = await saveCourse({ ...currentCourse, tests: testsRef.current }, isNewCourse);
-
-      if (result && result.roadmap) {
-        // Sort both arrays to ensure indices match (since order is preserved)
-        const sortedOldLessons = (currentCourse.roadmap || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-        const sortedNewLessons = (result.roadmap || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-
-        for (let i = 0; i < sortedNewLessons.length; i++) {
-          const savedLesson = sortedNewLessons[i];
-          const localLesson = sortedOldLessons[i];
-
-          if (localLesson?.attachments) {
-            const pending = localLesson.attachments.filter(a => !a.id || a.file);
-            if (pending.length > 0) {
-              // Upload using the REAL ID from the saved lesson
-              await uploadLessonAttachments(savedLesson.id, pending);
-            }
-          }
-        }
-      }
-
-      alert('Course saved successfully!');
-      const refreshed = await refreshCourseData(result.id);
-      setCourse(refreshed);
-      setTests(refreshed.tests || []);
-      setIsNewCourse(false);
+      return await saveCourseWithAttachments(currentCourse, true);
     } catch (error) {
       console.error(error);
       alert('Failed to save course.');
+      return false;
     }
   }, [isNewCourse]);
 
@@ -690,34 +822,39 @@ export const useCourseManager = (courseId?: number | null) => {
   const removePhoto = () => course && setCourse({ ...course, photo: null, photoUrl: '' });
 
   // === CHANGED: MULTIPLE VIDEO UPLOAD ===
-  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>, lessonId: number) => {
-    const files = e.target.files;
-    if (files && files.length > 0 && course) {
-      const newVideos = Array.from(files).map(file => ({
+  const handleVideoUpload = (files: FileList | File[], lessonId: number) => {
+    const videoFiles = Array.from(files).filter(file => {
+      const extensionLooksLikeVideo = /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(file.name);
+      return file.type.startsWith('video/') || extensionLooksLikeVideo;
+    });
+    if (videoFiles.length > 0) {
+      const newVideos = videoFiles.map(file => ({
         name: file.name,
         url: URL.createObjectURL(file),
         file: file
       }));
 
-      setCourse({
-        ...course,
-        roadmap: course.roadmap.map(l => 
+      setCourse(prev => prev ? {
+        ...prev,
+        roadmap: prev.roadmap.map(l =>
           l.id === lessonId 
             ? { ...l, videos: [...(l.videos || []), ...newVideos] } 
             : l
         )
-      });
+      } : null);
     }
   };
 
   // === CHANGED: REMOVE SPECIFIC VIDEO ===
   const removeVideo = async (lessonId: number, videoIndex: number) => {
-    if (!course) return;
+    const currentCourse = courseRef.current;
+    if (!currentCourse) return;
 
-    const lesson = course.roadmap.find(l => l.id === lessonId);
+    const lesson = currentCourse.roadmap.find(l => l.id === lessonId);
     if (!lesson || !lesson.videos) return;
 
     const videoToRemove = lesson.videos[videoIndex];
+    if (!videoToRemove) return;
 
     if (videoToRemove.id) {
         if(!window.confirm("Delete this video permanently?")) return;
@@ -741,14 +878,18 @@ export const useCourseManager = (courseId?: number | null) => {
     const updatedVideos = [...lesson.videos];
     updatedVideos.splice(videoIndex, 1);
 
-    setCourse({
-      ...course,
-      roadmap: course.roadmap.map(l => 
+    if (videoToRemove.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(videoToRemove.url);
+    }
+
+    setCourse(prev => prev ? {
+      ...prev,
+      roadmap: prev.roadmap.map(l =>
         l.id === lessonId 
           ? { ...l, videos: updatedVideos } 
           : l
       )
-    });
+    } : null);
   };
 
   const addTest = () => {
@@ -774,7 +915,7 @@ export const useCourseManager = (courseId?: number | null) => {
       if (editingTest === id) setEditingTest(null);
     }
   };
-  const saveTest = (testId?: number) => setEditingTest(null);
+  const saveTest = (_testId?: number) => setEditingTest(null);
 
   const getCurrentLesson = () => course?.roadmap.find(l => l.id === selectedLesson) || null;
 

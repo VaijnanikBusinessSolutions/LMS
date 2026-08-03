@@ -3,6 +3,7 @@ import logging
 import csv
 import calendar
 import os
+import re
 from Dojo2_0.api import LargeResultsSetPagination
 from django.core.files.base import ContentFile 
 import uuid
@@ -28,6 +29,8 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -1522,8 +1525,12 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         qs = LessonAttachment.objects.select_related('lesson', 'lesson__course')
 
-        # 1. Full managers see everything
-        if user.has_module_permission('courses', 'manage'):
+        # Course creators/editors can manage lesson materials they are editing.
+        if (
+            user.has_module_permission('courses', 'manage')
+            or user.has_module_permission('courses', 'create')
+            or user.has_module_permission('courses', 'update')
+        ):
             pass # No filtering needed for admins
 
         elif has_team_scope(user, 'courses') or has_team_scope(user, 'groups'):
@@ -1552,11 +1559,18 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
         ctx["request"] = self.request
         return ctx
 
+    def perform_destroy(self, instance):
+        uploaded_file = instance.file
+        instance.delete()
+        if uploaded_file:
+            uploaded_file.delete(save=False)
+
     @action(detail=False, methods=['post'], url_path='bulk-upload')
     def bulk_upload(self, request):
         lesson_id = request.data.get('lesson')
         files = request.FILES.getlist('files')
         urls = request.data.getlist('urls')
+        url_titles = request.data.getlist('url_titles')
 
         if not lesson_id:
             return Response({'error': 'Lesson ID is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1580,17 +1594,36 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
                 errors.append(f"Error saving file {f.name}: {str(e)}")
 
         # Process URLs
-        for link in urls:
+        validator = URLValidator(schemes=['http', 'https'])
+        for index, link in enumerate(urls):
             if link and link.strip() != "":
                 try: 
+                    cleaned_link = link.strip()
+                    match = re.search(r'((https?:\/\/|www\.)[^\s<>"\']+)', cleaned_link, re.IGNORECASE)
+                    if match:
+                        cleaned_link = match.group(1)
+                    if cleaned_link.lower().startswith('www.'):
+                        cleaned_link = f'https://{cleaned_link}'
+
+                    try:
+                        validator(cleaned_link)
+                    except DjangoValidationError:
+                        errors.append(f"Error saving URL {cleaned_link[:80]}...: invalid link format.")
+                        continue
+
+                    if len(cleaned_link) > 2048:
+                        errors.append(f"Error saving URL {cleaned_link[:80]}...: link is too long.")
+                        continue
+
+                    provided_title = url_titles[index].strip() if index < len(url_titles) and url_titles[index] else ""
                     attachment = LessonAttachment.objects.create(
                         lesson_id=lesson_id,
-                        url_link=link,
-                        name=link 
+                        url_link=cleaned_link,
+                        name=(provided_title[:200] if provided_title else cleaned_link[:200])
                     )
                     saved_attachments.append(attachment) 
                 except Exception as e:
-                    errors.append(f"Error saving URL {link}: {str(e)}") 
+                    errors.append(f"Error saving URL {link[:80]}...: {str(e)}") 
 
         # Return results
         serializer = self.get_serializer(saved_attachments, many=True) 
@@ -2851,13 +2884,47 @@ class CompetencyViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None
 
+    def _normalize_question_id(self, raw_id):
+        """Return a real DB id if this looks like one, otherwise None."""
+        if raw_id in (None, '', 0, '0'):
+            return None
+        if isinstance(raw_id, bool):
+            return None
+        try:
+            return int(raw_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _normalize_points(self, raw_points):
+        """Accept numbers/number-like strings and fall back to None when invalid."""
+        if raw_points in (None, ''):
+            return None
+        if isinstance(raw_points, bool):
+            return None
+        try:
+            points = int(raw_points)
+        except (TypeError, ValueError):
+            return None
+        return points if points >= 0 else None
+
+    def get_serializer_class(self):
+        if self.action in {'list', 'retrieve'}:
+            return CompetencyDetailSerializer
+        return CompetencySerializer
+
     def create(self, request, *args, **kwargs):
         # 1. Extract Data
         data = request.data
-        title = data.get('title')
-        description = data.get('description')
-        cat_name = data.get('category_name')
+        title = (data.get('title') or '').strip()
+        description = (data.get('description') or '').strip()
+        cat_name = (data.get('category_name') or '').strip()
         questions_data = data.get('questions', [])
+
+        if not title or not cat_name:
+            return Response(
+                {"detail": "Title and category are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # 2. Find or Create Category
         category, _ = CompetencyCategory.objects.get_or_create(
@@ -2874,11 +2941,18 @@ class CompetencyViewSet(viewsets.ModelViewSet):
 
         # 4. Create Questions linked to this Competency
         for q in questions_data:
-            if q.get('question_text'):
+            question_text = (q.get('question_text') or '').strip()
+            points = self._normalize_points(q.get('points'))
+            if question_text:
+                if points is None:
+                    return Response(
+                        {"detail": f"Points are required for question: {question_text}"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 AssessmentQuestion.objects.create(
                     competency=competency,
-                    question_text=q.get('question_text'),
-                    points=q.get('points', 10),
+                    question_text=question_text,
+                    points=points,
                     question_type=q.get('question_type', 'multiple_choice')
                 )
         
@@ -2890,11 +2964,15 @@ class CompetencyViewSet(viewsets.ModelViewSet):
         questions_data = data.get('questions', [])
 
         # 1. Update Basic Fields
-        instance.title = data.get('title', instance.title)
-        instance.description = data.get('description', instance.description)
+        incoming_title = data.get('title')
+        incoming_description = data.get('description')
+        if incoming_title is not None:
+            instance.title = incoming_title.strip()
+        if incoming_description is not None:
+            instance.description = incoming_description.strip()
         
         # 2. Update Category if changed
-        cat_name = data.get('category_name')
+        cat_name = (data.get('category_name') or '').strip()
         if cat_name:
             category, _ = CompetencyCategory.objects.get_or_create(name=cat_name)
             instance.category = category
@@ -2904,28 +2982,58 @@ class CompetencyViewSet(viewsets.ModelViewSet):
         # 3. Handle Questions (Create, Update, Delete)
         if questions_data is not None:
             # Get IDs of questions sent in the request
-            incoming_ids = [q.get('id') for q in questions_data if q.get('id')]
+            incoming_ids = [
+                question_id
+                for q in questions_data
+                if (question_id := self._normalize_question_id(q.get('id'))) is not None
+            ]
             
             # Delete questions that are NOT in the incoming list (Removed by user)
             instance.questions.exclude(id__in=incoming_ids).delete()
 
             for q_data in questions_data:
-                q_id = q_data.get('id')
+                q_id = self._normalize_question_id(q_data.get('id'))
+                question_text = (q_data.get('question_text') or '').strip()
+                points = self._normalize_points(q_data.get('points'))
                 
                 if q_id:
                     # Update existing question
                     q_obj = AssessmentQuestion.objects.filter(id=q_id, competency=instance).first()
                     if q_obj:
-                        q_obj.question_text = q_data.get('question_text', q_obj.question_text)
-                        q_obj.points = q_data.get('points', q_obj.points)
+                        if question_text:
+                            q_obj.question_text = question_text
+                        if points is None:
+                            return Response(
+                                {"detail": f"Points are required for question: {question_text or q_obj.question_text}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        q_obj.points = points
+                        q_obj.question_type = q_data.get('question_type', q_obj.question_type)
                         q_obj.save()
-                else:
-                    # Create new question (Added by user)
-                    if q_data.get('question_text'):
+                    elif question_text:
+                        if points is None:
+                            return Response(
+                                {"detail": f"Points are required for question: {question_text}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
                         AssessmentQuestion.objects.create(
                             competency=instance,
-                            question_text=q_data.get('question_text'),
-                            points=q_data.get('points', 10),
+                            question_text=question_text,
+                            points=points,
+                            question_type=q_data.get('question_type', 'multiple_choice')
+                        )
+                else:
+                    # Create new question (Added by user)
+                    if question_text:
+                        if points is None:
+                            return Response(
+                                {"detail": f"Points are required for question: {question_text}"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        AssessmentQuestion.objects.create(
+                            competency=instance,
+                            question_text=question_text,
+                            points=points,
                             question_type=q_data.get('question_type', 'multiple_choice')
                         )
 

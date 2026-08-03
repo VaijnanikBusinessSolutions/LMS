@@ -65,6 +65,10 @@ const NotificationPopup: React.FC = () => {
 
         sessionStorage.setItem(storageKey, String(unreadCount));
       } catch (error) {
+        if (error instanceof TypeError) {
+          console.warn("Notification unread-count service unavailable");
+          return;
+        }
         console.error("Failed to fetch notifications", error);
       }
     };
@@ -102,6 +106,10 @@ const NotificationPopup: React.FC = () => {
       sessionStorage.setItem(storageKey, "0");
       setNotificationCount(0);
     } catch (error) {
+      if (error instanceof TypeError) {
+        console.warn("Notification mark-all-read service unavailable");
+        return;
+      }
       console.error("Error clearing notifications", error);
     }
   };

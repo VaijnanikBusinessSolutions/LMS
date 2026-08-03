@@ -167,11 +167,9 @@ function App() {
       }
     };
 
-    window.addEventListener("focus", refreshPermissions);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("focus", refreshPermissions);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [dispatch, isAuthenticated, accessToken]);

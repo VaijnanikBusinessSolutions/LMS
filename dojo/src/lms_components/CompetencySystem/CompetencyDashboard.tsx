@@ -964,7 +964,7 @@ import {
   Building2, Layers, Shield, ChevronRight, Calendar, DollarSign, TrendingUp, 
   ArrowLeft, Trash2, FileText, HelpCircle, Save, AlertCircle, TrendingDown, AlertTriangle,
   Target, MapPin, CheckSquare, Square, CheckCircle, Home, Folder, ChevronLeft, CalendarDays,
-  Sparkles, Grip, GraduationCap, Loader2, Zap, Star, Award, Crown, Gem, Flame, Heart, 
+  Sparkles, Grip, GraduationCap, Loader2, Zap, Star, Award, Crown, Gem, Flame, Heart, Pencil,
   Diamond, Hexagon, Circle, Triangle, Pentagon
 } from 'lucide-react';
 import { normalizeListResponse } from '../../utils/api';
@@ -1760,29 +1760,85 @@ const FilterSelect = ({ label, icon, value, options, onChange, disabled, color =
   );
 };
 
+type CompetencyQuestion = {
+  id?: number | string;
+  question_text: string;
+  question_type: string;
+  points: number | '';
+};
+
+type CompetencyItem = {
+  id: number;
+  title: string;
+  description: string;
+  category?: number;
+  category_name?: string;
+  questions?: CompetencyQuestion[];
+};
+
 // --- LIBRARY VIEW ---
-const CompetencyLibraryView = ({ onCreate }: { onCreate: () => void }) => {
+const CompetencyLibraryView = ({
+  onCreate,
+  onEdit,
+}: {
+  onCreate: () => void;
+  onEdit: (competency: CompetencyItem) => void;
+}) => {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedCompetencyId, setExpandedCompetencyId] = useState<number | null>(null);
+
+  const fetchLibrary = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/skills/`, { headers: getAuthHeaders() });
+      if (res.ok) {
+          const skills = normalizeListResponse<CompetencyItem>(await res.json());
+          const grouped = skills.reduce((acc: any, skill: CompetencyItem) => {
+              const catName = skill.category_name || 'Uncategorized';
+              if (!acc[catName]) acc[catName] = { id: skill.category, name: catName, competencies: [] };
+              acc[catName].competencies.push(skill);
+              return acc;
+          }, {});
+          setCategories(Object.values(grouped));
+      }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  }, []);
 
   useEffect(() => {
-    const fetchLibrary = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/skills/`, { headers: getAuthHeaders() });
-        if (res.ok) {
-            const skills = await res.json();
-            const grouped = skills.reduce((acc: any, skill: any) => {
-                const catName = skill.category_name || 'Uncategorized';
-                if (!acc[catName]) acc[catName] = { id: skill.category, name: catName, competencies: [] };
-                acc[catName].competencies.push(skill);
-                return acc;
-            }, {});
-            setCategories(Object.values(grouped));
-        }
-      } catch (e) { console.error(e); } finally { setLoading(false); }
-    };
     fetchLibrary();
-  }, []);
+  }, [fetchLibrary]);
+
+  const toggleCompetencyQuestions = (competencyId: number) => {
+    setExpandedCompetencyId((prev) => (prev === competencyId ? null : competencyId));
+  };
+
+  const handleDelete = async (competencyId: number) => {
+    const confirmed = window.confirm('Delete this competency? This will also remove its assessment questions.');
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/skills/${competencyId}/`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete competency');
+      }
+
+      setCategories((prev) =>
+        prev
+          .map((category: any) => ({
+            ...category,
+            competencies: category.competencies.filter((competency: CompetencyItem) => competency.id !== competencyId),
+          }))
+          .filter((category: any) => category.competencies.length > 0)
+      );
+    } catch (error) {
+      console.error(error);
+      alert('Failed to delete competency.');
+    }
+  };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-[500px] bg-gradient-to-br from-amber-50/80 via-orange-50/60 to-yellow-50/40 dark:from-amber-900/20 dark:via-orange-900/15 dark:to-yellow-900/10 rounded-[2.5rem] border border-amber-100/60 dark:border-amber-800/30 shadow-inner">
@@ -1833,16 +1889,33 @@ const CompetencyLibraryView = ({ onCreate }: { onCreate: () => void }) => {
                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100/80 dark:bg-slate-800/80 px-2.5 py-1 rounded-full">{category.competencies?.length || 0} skills</span>
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                      {category.competencies?.map((comp: any, idx: number) => (
+                      {category.competencies?.map((comp: CompetencyItem, idx: number) => {
+                          const isExpanded = expandedCompetencyId === comp.id;
+                          const questionCount = comp.questions?.length || 0;
+
+                          return (
                           <div 
                             key={comp.id} 
-                            className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-lg shadow-slate-100/40 dark:shadow-black/20 hover:shadow-xl hover:shadow-amber-100/40 hover:border-amber-200/60 dark:hover:border-amber-700/40 cursor-pointer transition-all duration-500 group flex flex-col h-full hover:-translate-y-1"
+                            className="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl p-6 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-lg shadow-slate-100/40 dark:shadow-black/20 hover:shadow-xl hover:shadow-amber-100/40 hover:border-amber-200/60 dark:hover:border-amber-700/40 transition-all duration-500 group flex flex-col h-full hover:-translate-y-1"
                             style={{ animationDelay: `${idx * 50}ms` }}
                           >
                               <div className="flex items-start justify-between mb-3">
                                 <h4 className="font-bold text-slate-700 dark:text-slate-200 text-lg group-hover:text-amber-500 dark:group-hover:text-amber-400 transition-colors">{comp.title}</h4>
-                                <div className="p-1.5 bg-amber-50/80 dark:bg-amber-900/15 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Sparkles size={14} className="text-amber-400"/>
+                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => onEdit(comp)}
+                                    className="p-2 bg-amber-50/80 dark:bg-amber-900/15 rounded-lg text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-900/25 transition-colors"
+                                    title="Edit competency"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(comp.id)}
+                                    className="p-2 bg-rose-50/80 dark:bg-rose-900/15 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/25 transition-colors"
+                                    title="Delete competency"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
                                 </div>
                               </div>
                               <p className="text-slate-400 dark:text-slate-500 text-sm line-clamp-2 mb-5 flex-1 font-medium">{comp.description}</p>
@@ -1850,10 +1923,55 @@ const CompetencyLibraryView = ({ onCreate }: { onCreate: () => void }) => {
                                   <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-500 dark:text-amber-400 bg-amber-50/80 dark:bg-amber-900/15 px-3 py-1.5 rounded-lg">
                                     <Award size={14} className="text-amber-400"/> Skill
                                   </span>
-                                  <ChevronRight size={18} className="text-slate-300 dark:text-slate-600 group-hover:text-amber-400 group-hover:translate-x-1 transition-all"/>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCompetencyQuestions(comp.id)}
+                                    className="flex items-center gap-2 rounded-xl px-2 py-1 transition-all hover:bg-amber-50/70 dark:hover:bg-amber-900/10"
+                                    aria-expanded={isExpanded}
+                                    aria-label={`${isExpanded ? 'Hide' : 'Show'} questions for ${comp.title}`}
+                                  >
+                                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 bg-slate-100/80 dark:bg-slate-800/80 px-2.5 py-1 rounded-full">
+                                      {questionCount} questions
+                                    </span>
+                                    <ChevronRight
+                                      size={18}
+                                      className={`text-slate-300 dark:text-slate-600 group-hover:text-amber-400 transition-all ${isExpanded ? 'rotate-90 text-amber-400 translate-x-0.5' : 'group-hover:translate-x-1'}`}
+                                    />
+                                  </button>
                               </div>
+                              {isExpanded && (
+                                <div className="mt-4 pt-4 border-t border-amber-100/70 dark:border-amber-900/20 space-y-2">
+                                  {questionCount > 0 ? (
+                                    comp.questions?.map((question, questionIdx) => (
+                                      <div
+                                        key={question.id ?? `${comp.id}-${questionIdx}`}
+                                        className="rounded-xl border border-amber-100/80 dark:border-amber-900/20 bg-gradient-to-r from-amber-50/70 to-orange-50/40 dark:from-amber-900/10 dark:to-orange-900/5 px-4 py-3"
+                                      >
+                                        <div className="flex items-start gap-3">
+                                          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
+                                            {questionIdx + 1}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 break-words">
+                                              {question.question_text}
+                                            </p>
+                                            <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                              {question.question_type.replace(/_/g, ' ')} {'\u2022'} {question.points} pts
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="rounded-xl border border-dashed border-slate-200/80 dark:border-slate-700/70 px-4 py-3 text-sm font-medium text-slate-400 dark:text-slate-500">
+                                      No questions added for this competency yet.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                           </div>
-                      ))}
+                          );
+                      })}
                   </div>
               </div>
           ))}
@@ -1941,29 +2059,109 @@ const LevelsView = () => {
 };
 
 // --- CREATE COMPETENCY VIEW ---
-const CreateCompetencyView = ({ onBack, onSave }: { onBack: () => void, onSave: () => void }) => {
+const CreateCompetencyView = ({
+  onBack,
+  onSave,
+  initialCompetency,
+}: {
+  onBack: () => void;
+  onSave: () => void;
+  initialCompetency?: CompetencyItem | null;
+}) => {
+  const showError = (message: string) => {
+    setError(message);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const createEmptyQuestion = () => ({
+    id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    question_text: '',
+    question_type: 'multiple_choice',
+    points: '' as const,
+  });
+
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Technical');
   const [description, setDescription] = useState('');
-  const [questions, setQuestions] = useState([{ id: Date.now(), question_text: '', question_type: 'multiple_choice', points: 10 }]);
+  const [questions, setQuestions] = useState([createEmptyQuestion()]);
   const [error, setError] = useState('');
 
   const CATEGORIES = [{ id: 'Technical', name: 'Technical' }, { id: 'Behavioral', name: 'Behavioral (Soft Skills)' }, { id: 'Functional', name: 'Functional' }, { id: 'Core', name: 'Core' }];
 
-  const addQuestion = () => setQuestions([...questions, { id: Date.now(), question_text: '', question_type: 'multiple_choice', points: 10 }]);
-  const removeQuestion = (id: number) => { if (questions.length === 1) return; setQuestions(questions.filter(q => q.id !== id)); };
-  const updateQuestionText = (id: number, text: string) => setQuestions(questions.map(q => q.id === id ? { ...q, question_text: text } : q));
+  const addQuestion = () => setQuestions([...questions, createEmptyQuestion()]);
+  const removeQuestion = (id: number | string) => { if (questions.length === 1) return; setQuestions(questions.filter(q => q.id !== id)); };
+  const updateQuestionText = (id: number | string, text: string) => setQuestions(questions.map(q => q.id === id ? { ...q, question_text: text } : q));
+  const updateQuestionPoints = (id: number | string, points: string) =>
+    setQuestions(questions.map(q => q.id === id ? { ...q, points: points === '' ? '' : Number(points) } : q));
+
+  useEffect(() => {
+    if (!initialCompetency) {
+      setTitle('');
+      setCategory('Technical');
+      setDescription('');
+      setQuestions([createEmptyQuestion()]);
+      setError('');
+      return;
+    }
+
+    setTitle(initialCompetency.title || '');
+    setCategory(initialCompetency.category_name || 'Technical');
+    setDescription(initialCompetency.description || '');
+    setQuestions(
+      initialCompetency.questions?.length
+        ? initialCompetency.questions.map((question, index) => ({
+            id: question.id || Date.now() + index,
+            question_text: question.question_text || '',
+            question_type: question.question_type || 'multiple_choice',
+            points: question.points ?? '',
+          }))
+        : [createEmptyQuestion()]
+    );
+    setError('');
+  }, [initialCompetency]);
 
   const handleSave = async () => {
-    if (!title.trim() || !description.trim()) { setError('Please fill in Title and Description.'); return; }
+    if (!title.trim()) { showError('Please fill in the competency title.'); return; }
     const validQuestions = questions.filter(q => q.question_text.trim() !== '');
-    if (validQuestions.length === 0) { setError('Please add at least one question.'); return; }
+    if (validQuestions.length === 0) { showError('Please add at least one question.'); return; }
+    const hasMissingPoints = validQuestions.some(q => q.points === '' || Number(q.points) < 0);
+    if (hasMissingPoints) { showError('Please enter points for every question in the competency library.'); return; }
 
     try {
-        const payload = { title, description, category_name: category, questions: validQuestions.map(q => ({ question_text: q.question_text, question_type: q.question_type, points: q.points })) };
-        const res = await fetch(`${API_BASE}/skills/`, { method: 'POST', headers: getAuthHeaders(), body: JSON.stringify(payload) });
-        if (res.ok) onSave(); else { const errData = await res.json(); setError(errData.detail || 'Failed to save.'); }
-    } catch (e) { setError('Network error'); }
+        setError('');
+        const payload = {
+          title,
+          description,
+          category_name: category,
+          questions: validQuestions.map(q => ({
+            ...(typeof q.id === 'number' && Number.isInteger(q.id) ? { id: q.id } : {}),
+            question_text: q.question_text,
+            question_type: q.question_type,
+            points: Number(q.points),
+          })),
+        };
+        const url = initialCompetency ? `${API_BASE}/skills/${initialCompetency.id}/` : `${API_BASE}/skills/`;
+        const method = initialCompetency ? 'PUT' : 'POST';
+        const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
+        if (res.ok) {
+          onSave();
+        } else {
+          const rawText = await res.text();
+          let message = 'Failed to save competency.';
+          try {
+            const errData = JSON.parse(rawText);
+            message =
+              errData.detail ||
+              Object.entries(errData)
+                .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+                .join(' | ') ||
+              message;
+          } catch {
+            if (rawText.trim()) message = rawText;
+          }
+          showError(message);
+        }
+    } catch (e) { showError('Network error while saving competency.'); }
   };
 
   return (
@@ -1977,14 +2175,16 @@ const CreateCompetencyView = ({ onBack, onSave }: { onBack: () => void, onSave: 
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-300 via-blue-400 to-indigo-500 rounded-2xl blur-xl opacity-35"></div>
             <div className="relative p-4 bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-500 rounded-2xl shadow-xl shadow-cyan-400/25">
-              <Plus size={28} className="text-white" />
+              {initialCompetency ? <Pencil size={28} className="text-white" /> : <Plus size={28} className="text-white" />}
             </div>
           </div>
           <div>
             <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 dark:from-cyan-300 dark:via-blue-300 dark:to-indigo-300 tracking-tight">
-              Create Competency
+              {initialCompetency ? 'Edit Competency' : 'Create Competency'}
             </h1>
-            <p className="text-slate-400 dark:text-slate-500 mt-1.5 text-base font-medium">Define skill details and assessment questions</p>
+            <p className="text-slate-400 dark:text-slate-500 mt-1.5 text-base font-medium">
+              {initialCompetency ? 'Update skill details and assessment questions' : 'Define skill details and assessment questions'}
+            </p>
           </div>
         </div>
       </div>
@@ -2073,13 +2273,28 @@ const CreateCompetencyView = ({ onBack, onSave }: { onBack: () => void, onSave: 
                     Q{index + 1}
                   </span>
                   <div className="flex-1 space-y-2.5">
-                    <input 
-                      type="text" 
-                      value={q.question_text} 
-                      onChange={(e) => updateQuestionText(q.id, e.target.value)} 
-                      placeholder="Enter your question here..." 
-                      className="w-full p-3.5 bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 rounded-lg focus:border-teal-300 focus:ring-2 focus:ring-teal-400/20 outline-none text-sm font-semibold text-slate-600 dark:text-slate-300 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" 
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_140px] gap-3">
+                      <input 
+                        type="text" 
+                        value={q.question_text} 
+                        onChange={(e) => updateQuestionText(q.id, e.target.value)} 
+                        placeholder="Enter your question here..." 
+                        className="w-full p-3.5 bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 rounded-lg focus:border-teal-300 focus:ring-2 focus:ring-teal-400/20 outline-none text-sm font-semibold text-slate-600 dark:text-slate-300 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600" 
+                      />
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                          Points
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={q.points}
+                          onChange={(e) => updateQuestionPoints(q.id, e.target.value)}
+                          placeholder="Set points"
+                          className="w-full p-3.5 bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 rounded-lg focus:border-amber-300 focus:ring-2 focus:ring-amber-400/20 outline-none text-sm font-semibold text-slate-600 dark:text-slate-300 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <button 
                     onClick={() => removeQuestion(q.id)} 
@@ -2099,7 +2314,7 @@ const CreateCompetencyView = ({ onBack, onSave }: { onBack: () => void, onSave: 
             Cancel
           </button>
           <button onClick={handleSave} className="px-8 py-3.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 dark:from-cyan-500 dark:via-blue-500 dark:to-indigo-500 hover:from-cyan-500 hover:via-blue-600 hover:to-indigo-600 text-white font-bold rounded-xl shadow-xl shadow-cyan-400/25 dark:shadow-cyan-900/30 flex items-center gap-2.5 text-base transform transition-all hover:scale-[1.02] hover:-translate-y-0.5 active:scale-95">
-            <Save size={18} /> Save Competency
+            <Save size={18} /> {initialCompetency ? 'Update Competency' : 'Save Competency'}
           </button>
         </div>
       </div>
@@ -2182,6 +2397,27 @@ const NavigationHub = ({ activeTab, setActiveTab }: { activeTab: string, setActi
 
 export default function CompetencyManager() {
   const [activeTab, setActiveTab] = useState<'library' | 'matrix' | 'levels' | 'financial' | 'create-competency' | 'gap-analysis' | 'rule-setup' | 'assessment'>('matrix');
+  const [editingCompetency, setEditingCompetency] = useState<CompetencyItem | null>(null);
+
+  const handleCreate = () => {
+    setEditingCompetency(null);
+    setActiveTab('create-competency');
+  };
+
+  const handleEdit = (competency: CompetencyItem) => {
+    setEditingCompetency(competency);
+    setActiveTab('create-competency');
+  };
+
+  const handleBackToLibrary = () => {
+    setEditingCompetency(null);
+    setActiveTab('library');
+  };
+
+  const handleSaved = () => {
+    setEditingCompetency(null);
+    setActiveTab('library');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50/80 via-indigo-50/30 to-purple-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-purple-950/10 font-sans text-slate-900 dark:text-slate-100 selection:bg-purple-200/60 dark:selection:bg-purple-900/60 selection:text-purple-900 dark:selection:text-purple-100 transition-colors duration-500">
@@ -2222,8 +2458,8 @@ export default function CompetencyManager() {
       {/* 2. MAIN CONTENT AREA */}
       <main className="w-full py-10 px-10 relative">
         <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
-          {activeTab === 'library' && <CompetencyLibraryView onCreate={() => setActiveTab('create-competency')} />}
-          {activeTab === 'create-competency' && <CreateCompetencyView onBack={() => setActiveTab('library')} onSave={() => setActiveTab('library')} />}
+          {activeTab === 'library' && <CompetencyLibraryView onCreate={handleCreate} onEdit={handleEdit} />}
+          {activeTab === 'create-competency' && <CreateCompetencyView onBack={handleBackToLibrary} onSave={handleSaved} initialCompetency={editingCompetency} />}
           {activeTab === 'matrix' && <CompetencyDashboard onNavigate={setActiveTab} />}
           {activeTab === 'levels' && <LevelsView />}
           {activeTab === 'gap-analysis' && <GapAnalysisView />}

@@ -414,7 +414,9 @@ export const refreshCourseData = async (courseId: number): Promise<Course> => {
 
 export const uploadLessonAttachments = async (lessonId: number, attachments: Attachment[]) => {
   // Filter for items that don't have a real ID (unsaved) OR explicitly have a file object
-  const pendingItems = attachments.filter(a => !a.id || a.file);
+  const pendingItems = attachments.filter(a =>
+    !a.id && ((a.file instanceof File) || (a.url_link && a.url_link.trim() !== ''))
+  );
   
   if (pendingItems.length === 0) return;
 
@@ -425,13 +427,14 @@ export const uploadLessonAttachments = async (lessonId: number, attachments: Att
 
   pendingItems.forEach(att => {
     // Only append if it's a file type AND has a valid File object
-    if (att.type === 'file' && att.file instanceof File) {
+    if ((att.type === 'file' || att.file) && att.file instanceof File) {
       formData.append('files', att.file);
       hasData = true;
     } 
     // Only append if it's a url type AND has a valid string
-    else if (att.type === 'url' && att.url_link && att.url_link.trim() !== '') {
+    else if ((att.type === 'url' || att.url_link) && att.url_link && att.url_link.trim() !== '') {
       formData.append('urls', att.url_link);
+      formData.append('url_titles', att.name || '');
       hasData = true;
     }
   });
@@ -464,7 +467,41 @@ export const uploadLessonAttachments = async (lessonId: number, attachments: Att
   return await response.json();
 };
 
-export const processCourseForAPI = (course: Course, isNewCourse: boolean = false) => {
+export const uploadSingleLessonAttachment = async (lessonId: number, attachment: Attachment): Promise<Attachment> => {
+  const result = await uploadLessonAttachments(lessonId, [attachment]);
+  const uploaded = result?.uploaded?.[0];
+
+  if (!uploaded) {
+    throw new Error('Attachment upload did not return a saved material.');
+  }
+
+  return {
+    ...uploaded,
+    type: uploaded.url_link ? 'url' : 'file',
+    name: uploaded.name || uploaded.url_link || uploaded.file?.split('/').pop() || attachment.name,
+  };
+};
+
+export const deleteLessonAttachment = async (attachmentId: number): Promise<void> => {
+  const response = await fetch(`${API_URL}/lesson-attachments/${attachmentId}/`, {
+    method: 'DELETE',
+    headers: {
+      ...getAuthHeaders(),
+    } as HeadersInit
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error('Attachment delete failed:', responseText);
+    throw new Error(`Failed to delete attachment. Server responded with ${response.status}`);
+  }
+};
+
+export const processCourseForAPI = (course: Course, _isNewCourse: boolean = false) => {
   const formData = new FormData();
   
   formData.append('title', course.title);

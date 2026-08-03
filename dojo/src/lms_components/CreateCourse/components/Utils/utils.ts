@@ -339,7 +339,11 @@ export const processCourseFromAPI = (courseData: any): Course => {
     videoUrl: lesson.videoUrl || '',
     video: null,
     
-    attachments: Array.isArray(lesson.attachments) ? lesson.attachments : []
+    attachments: Array.isArray(lesson.attachments) ? lesson.attachments.map((att: any) => ({
+      ...att,
+      type: att.url_link ? 'url' : 'file',
+      name: att.name || att.url_link || att.file?.split('/').pop() || 'Material'
+    })) : []
   }));
   
   return courseData;
