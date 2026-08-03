@@ -204,8 +204,22 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('last_name', 'User')
         extra_fields.setdefault('employeeid', 'ADMIN001') 
 
-        if 'role' not in extra_fields:
-            raise ValueError(_('Superuser role is required. Create/select the admin role from Role Management first.'))
+        # ``createsuperuser`` only prompts for fields in ``REQUIRED_FIELDS``;
+        # it cannot supply a ForeignKey role.  Bootstrap (or reuse) the Admin
+        # role so the first administrator can always be created from the CLI.
+        if not extra_fields.get('role'):
+            admin_role = Role.objects.filter(
+                name__iexact='admin', is_active=True
+            ).first()
+            if admin_role is None:
+                admin_role, _ = Role.objects.get_or_create(
+                    name='Admin',
+                    defaults={'is_active': True},
+                )
+                if not admin_role.is_active:
+                    admin_role.is_active = True
+                    admin_role.save(update_fields=['is_active'])
+            extra_fields['role'] = admin_role
 
         if extra_fields.get('is_staff') is not True:
             raise ValueError(_('Superuser must have is_staff=True.'))
